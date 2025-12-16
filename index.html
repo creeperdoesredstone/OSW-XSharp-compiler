@@ -13,7 +13,7 @@
 	</head>
 	<body>
 		<div class="container">
-			<h2>Config</h2>
+			<h2>Configure Assembly</h2>
 			<form>
 				<label for="language">Choose an assembly language:</label>
 				<select id="language" name="language">
@@ -27,13 +27,26 @@
 					<option value="DX">DX</option>
 				</select>
 			</form>
+
+			<h2>Configure Workspace</h2>
+			<form>
+				<label for="show-rpn">Show RPN?</label>
+				<input type="checkbox" id="show-rpn" name="show-rpn" />
+			</form>
+
 			<hr />
+
 			<h2>X# Compiler</h2>
 			<div class="buttons">
 				<button type="button" id="import-btn" title="Import">
 					<i class="fa-solid fa-file-import"></i> Import
 				</button>
-				<input type="file" id="file-input" style="display: none;" accept=".xs">
+				<input
+					type="file"
+					id="file-input"
+					style="display: none"
+					accept=".xs"
+				/>
 				<button type="button" id="compile-btn" title="Compile">
 					<i class="fa-solid fa-play"></i> Compile
 				</button>
@@ -50,6 +63,207 @@
 			<div id="output" class="div-code">
 				<span class="label">Assembly Output</span>
 			</div>
+
+			<hr />
+
+			<h2>Documentation</h2>
+			<details>
+				<summary>Overview</summary>
+				<p>
+					<span class="token-inst">X#</span>, or
+					<span class="token-inst">XSharp</span>, is a programming
+					language developed by
+					<span class="highlight">creeperdoesredstone</span>
+					originally for his
+					<span class="token-value">Xenon</span> CPU to aid in
+					developing assembly programs.
+				</p>
+				<p>
+					Now, it is used for
+					<span class="highlight">creeperdoesredstone</span>'s new
+					<span class="highlight">Xenon-124 VM</span> in
+					<span class="token-register">OS Wars 26.</span>
+				</p>
+				<br />
+				<p>
+					The ISA for the Xenon-124 VM can be found
+					<a
+						href="https://docs.google.com/spreadsheets/d/1lWkRa2bWt4Imss0K8sfAVuTmYVx9m5RivHfTwb5bBWM/edit?usp=sharing"
+						>here</a
+					>.
+				</p>
+			</details>
+			<details>
+				<summary>Syntax and Structure</summary>
+				<h4>Statement Termination</h4>
+				<p>
+					Statements must be separated using a semicolon
+					(<code>;</code>).
+				</p>
+				<br />
+				<h4>Literals</h4>
+				<p>X# currently supports these types of literals:</p>
+				<table>
+					<tr>
+						<th>Type</th>
+						<th>Format</th>
+						<th>Example</th>
+					</tr>
+					<tr>
+						<td><code class="token-inst">int</code></td>
+						<td>int16</td>
+						<td>
+							<code>123</code>, <code>0</code>, <code>-57</code>
+						</td>
+					</tr>
+					<tr>
+						<td><code class="token-inst">float</code></td>
+						<td>fp16 (bias = 15)</td>
+						<td>
+							<code>3.1415</code>, <code>0.0625</code>,
+							<code>-1000.5</code>
+						</td>
+					</tr>
+				</table>
+			</details>
+			<details>
+				<summary>Operators and Precedence</summary>
+				<p>
+					<span class="token-inst">X#</span> supports standard
+					arithmetic operators. Expressions are evaluated using
+					standard operator precedence rules, enforced by parentheses
+					(<code>()</code>):
+				</p>
+				<table>
+					<tr>
+						<th>Operator</th>
+						<th>Type</th>
+						<th>Precedence</th>
+						<th>Associativity</th>
+					</tr>
+					<tr>
+						<td><code>-</code>, <code>+</code> (unary)</td>
+						<td>Unary</td>
+						<td>5</td>
+						<td>right</td>
+					</tr>
+					<tr>
+						<td><code>^</code></td>
+						<td>Binary</td>
+						<td>4</td>
+						<td>right</td>
+					</tr>
+					<tr>
+						<td><code>*</code>, <code>/</code>, <code>%</code></td>
+						<td>Binary</td>
+						<td>3</td>
+						<td>left</td>
+					</tr>
+					<tr>
+						<td><code>+</code>, <code>-</code></td>
+						<td>Binary</td>
+						<td>2</td>
+						<td>left</td>
+					</tr>
+					<tr>
+						<td><code>=</code></td>
+						<td>Binary</td>
+						<td>1</td>
+						<td>right</td>
+					</tr>
+				</table>
+			</details>
+			<details>
+				<summary>Using Variables</summary>
+				<h4>Declaring variables</h4>
+				<p>
+					Variables are declared using the <code>var</code> keyword as
+					follows:
+				</p>
+				<div class="code-block">var identifier = expr;</div>
+
+				<p>
+					Currently, the variable's data type is inferred
+					automatically.
+				</p>
+				<br />
+				<h4>Changing values of variables</h4>
+				<p>
+					Once declared, the value of a variable can be changed using
+					the assignment operator:
+				</p>
+				<div class="code-block">identifier = expr;</div>
+				<p>
+					Variables can be assigned a value with the same data type.
+				</p>
+				<p>
+					For example, if we have this code then the compiler would
+					throw an error:
+				</p>
+				<div class="code-block">var a = 14;<br />a = 2.0;</div>
+			</details>
+			<details>
+				<summary>Parsing</summary>
+				<p>
+					The Xenon parser uses the
+					<span class="token-inst"
+						>Shunting Yard Algorithm (SYA)</span
+					>
+					to convert the infix source code into
+					<span class="highlight">Reverse Polish Notation</span>,
+					allowing the compiler to execute instructions directly using
+					a stack.
+				</p>
+				<p>
+					You can read more about the Shunting Yard Algorithm
+					<a
+						href="https://brilliant.org/wiki/shunting-yard-algorithm/"
+						>here</a
+					>.
+				</p>
+			</details>
+			<details>
+				<summary>Supported ISAs</summary>
+				<p>
+					The <span class="token-inst">X# Compiler</span> currently
+					supports these ISAs:
+				</p>
+				<details>
+					<summary>Xenon-124 ISA (OS Wars 26)</summary>
+					<p>
+						<span class="highlight">Xenon-124</span> is a conceptual
+						<span class="token-value">16-bit</span> virtual machine
+						by
+						<a
+							href="https://scratch.mit.edu/users/creeperdoesredstone/"
+							>creeperdoesredstone</a
+						>.
+					</p>
+					<br />
+					<h4>Specs:</h4>
+					<p>
+						- 4 <span class="token-value">16-bit</span> registers:
+						<span class="token-register">AX</span>,
+						<span class="token-register">BX</span>,
+						<span class="token-register">CX</span>, and
+						<span class="token-register">DX</span>.
+					</p>
+					<p>
+						- 2 <span class="token-value">16-bit</span> pointers:
+						<span class="token-register">BP</span> and
+						<span class="token-register">SP</span>.
+					</p>
+					<p>
+						- <span class="token-value">65536</span> addresses =>
+						<span class="token-value">131KiB</span> of RAM and PROM.
+					</p>
+					<p>
+						- <span class="token-value">42</span> instructions so
+						far.
+					</p>
+				</details>
+			</details>
+			<hr />
 		</div>
 
 		<script src="compiler.js"></script>

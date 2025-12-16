@@ -136,7 +136,7 @@ option:hover {
 	display: flex;
 	flex-direction: row;
 	justify-content: flex-start;
-	column-gap: 100px;
+	column-gap: 20px;
 }
 
 .buttons > * {
@@ -203,4 +203,78 @@ option:hover {
 .token-error {
 	color: #ff0090;
 	font-weight: 700;
+}
+
+details {
+	align-self: flex-start;
+}
+
+summary {
+	margin-left: 10px;
+	font-weight: 800;
+	transition: all 300ms ease;
+}
+
+summary:hover {
+	cursor: pointer;
+	color: dodgerblue;
+}
+
+details > *:not(summary) {
+	margin-left: 24px;
+}
+
+details > h4 {
+	color: #f491ff;
+}
+
+details code {
+	color: #ff0090;
+	background-color: black;
+	border-radius: 4px;
+	padding: 4px;
+}
+
+.highlight {
+	color: cyan;
+	text-shadow: 0 0 3px cyan;
+}
+
+table {
+	margin-top: 10px;
+}
+
+th,
+td {
+	padding: 6px;
+	border: 1px solid white;
+}
+
+th {
+	background-color: white;
+	color: black;
+}
+
+td {
+	background-color: #ffffff29;
+}
+
+a {
+	color: yellow;
+	text-decoration: none;
+	transition: all 300ms ease;
+}
+
+a:hover {
+	color: #ffffa8;
+	text-shadow: 0 0 2px white;
+}
+
+.code-block {
+	width: inherit;
+	padding: 16px 10px;
+	margin-top: 6px;
+	margin-bottom: 6px;
+	background-color: #ffffff29;
+	border-radius: 4px;
 }

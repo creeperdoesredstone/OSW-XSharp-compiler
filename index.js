@@ -16,9 +16,19 @@ fileInput.addEventListener("change", () => {
 
 	reader.onload = (e) => {
 		const content = e.target.result;
-		output.innerText = content; // Display the content
+		output.innerText = content;
 	};
 
-	// Read the file as text (other methods like readAsDataURL also exist)
 	reader.readAsText(file);
 });
+
+const checkRPNState = () => {
+	const rpnDisplay = document.getElementById("rpn-output");
+	if (!showRPNCheck.checked) rpnDisplay.style = "display: none;";
+	else rpnDisplay.style = "";
+};
+
+const showRPNCheck = document.getElementById("show-rpn");
+showRPNCheck.addEventListener("change", checkRPNState);
+
+checkRPNState();

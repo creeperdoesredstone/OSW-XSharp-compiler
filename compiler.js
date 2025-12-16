@@ -42,6 +42,7 @@ const ttList = [
 	"SEMI",
 	"COL",
 	"IDEN",
+	"TOASSIGN",
 	"KEYW",
 	"INT",
 	"FLOAT",
@@ -181,6 +182,8 @@ class Compiler {
 		this.regDest = document.getElementById("store-res").value;
 		this.isFloatMode = false;
 		this.lastMode = false;
+
+		this.symbolTable = {};
 	}
 
 	advance() {
@@ -218,14 +221,16 @@ class Compiler {
 	}
 
 	performConstantOperation(operatorType, rightTok, leftTok) {
-		if (rightTok.type !== TT.INT && rightTok.type !== TT.FLOAT) return null;
+		const res = new Result();
+		if (rightTok.type !== TT.INT && rightTok.type !== TT.FLOAT)
+			return res.success(null);
 
 		if (
 			leftTok !== undefined &&
 			leftTok.type !== TT.INT &&
 			leftTok.type !== TT.FLOAT
 		)
-			return null;
+			return res.success(null);
 
 		const left = leftTok !== undefined ? Number(leftTok.value) : 0;
 		const right = Number(rightTok.value);
@@ -248,7 +253,13 @@ class Compiler {
 				break;
 			case "DIV":
 				if (right === 0) {
-					return null;
+					return res.fail(
+						new Error_Compilation(
+							rightTok.startPos,
+							rightTok.endPos,
+							"Division by 0."
+						)
+					);
 				}
 				resultValue = left / right;
 				if (resultType === TT.INT) {
@@ -271,7 +282,7 @@ class Compiler {
 				resultValue = right;
 				break;
 			default:
-				return null;
+				return res.success(null);
 		}
 
 		// Adjust result value and type for INT/FLOAT consistency
@@ -294,7 +305,7 @@ class Compiler {
 			leftTok !== undefined ? leftTok.startPos : rightTok.startPos,
 			rightTok.endPos
 		);
-		return resultToken;
+		return res.success(resultToken);
 	}
 
 	pushImmediate(value) {
@@ -385,6 +396,11 @@ class Compiler {
 					optStack.push(this.currentTok);
 					this.advance();
 					break;
+				
+				case this.currentTok.type === TT.TOASSIGN:
+					optStack.push(this.currentTok);
+					this.advance();
+					break;
 
 				case this.currentTok.type.description in operators:
 					const isUnary =
@@ -408,11 +424,14 @@ class Compiler {
 					if (!isUnary) leftTok = optStack.pop();
 					const operatorType = this.currentTok.type.description;
 
-					const foldedResult = this.performConstantOperation(
-						operatorType,
-						rightTok,
-						leftTok
+					const foldedResult = res.register(
+						this.performConstantOperation(
+							operatorType,
+							rightTok,
+							leftTok
+						)
 					);
+					if (res.error) return res;
 
 					const removeNum = (value) => {
 						let valToRemove = value;
@@ -445,7 +464,6 @@ class Compiler {
 						const varLocation = this.declaredVars.indexOf(
 							leftTok.value
 						);
-
 						if (varLocation === -1)
 							return res.fail(
 								new Error_Compilation(
@@ -454,6 +472,30 @@ class Compiler {
 									`Variable ${leftTok} is undefined.`
 								)
 							);
+
+						if (!(leftTok.value in this.symbolTable)) {
+							this.symbolTable[leftTok.value] = {
+								location: varLocation,
+								type: rightTok.type,
+							};
+						} else {
+							if (
+								rightTok.type !==
+								this.symbolTable[leftTok.value].type
+							) {
+								return res.fail(
+									new Error_Compilation(
+										rightTok.startPos,
+										rightTok.endPos,
+										`Cannot assign '${
+											rightTok.type.description
+										}' to '${
+											this.symbolTable[leftTok.value].type.description
+										}'.`
+									)
+								);
+							}
+						}
 
 						this.pushInstruction("POP", [this.regDest]);
 						this.pushInstruction("LDIB", [
@@ -552,8 +594,6 @@ class Compiler {
 							.innerText;
 					nextnextArgs = getArgs(nextnextInst);
 				}
-
-				console.log(op, nextOp);
 
 				if (op === "PUSH" && next && nextOp === "POP") {
 					if (currentArgs[0] === nextArgs[0]) {

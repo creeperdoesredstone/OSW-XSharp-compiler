@@ -336,6 +336,7 @@ class Parser {
 						o1Type === "ASGN" &&
 						this.nextIdenForAssignment !== null
 					) {
+						this.nextIdenForAssignment.type = TT.TOASSIGN;
 						outputQueue.push(this.nextIdenForAssignment);
 						this.nextIdenForAssignment = null;
 					}
