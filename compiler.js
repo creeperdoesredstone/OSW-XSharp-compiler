@@ -1,0 +1,616 @@
+const operators = {
+	USUB: {
+		prec: 5,
+		assoc: "right",
+	},
+	UADD: {
+		prec: 5,
+		assoc: "right",
+	},
+	POW: {
+		prec: 4,
+		assoc: "right",
+	},
+	MUL: {
+		prec: 3,
+		assoc: "left",
+	},
+	DIV: {
+		prec: 3,
+		assoc: "left",
+	},
+	MOD: {
+		prec: 3,
+		assoc: "left",
+	},
+	ADD: {
+		prec: 2,
+		assoc: "left",
+	},
+	SUB: {
+		prec: 2,
+		assoc: "left",
+	},
+	ASGN: {
+		prec: 1,
+		assoc: "right",
+	},
+};
+const ttList = [
+	"EOF",
+	"END",
+	"SEMI",
+	"COL",
+	"IDEN",
+	"KEYW",
+	"INT",
+	"FLOAT",
+	"ADD",
+	"UADD",
+	"SUB",
+	"USUB",
+	"MUL",
+	"DIV",
+	"MOD",
+	"POW",
+	"ASGN",
+	"LPR",
+	"RPR",
+];
+const KEYWORDS = ["var"];
+const DIGITS = "0123456789";
+const LETTERS = "abcdefghijklmnopqrstuvwxyz";
+const VALID_IDEN = LETTERS + DIGITS + "_-";
+
+const TT = Object.freeze(
+	ttList.reduce((obj, item) => {
+		obj[item] = Symbol(item);
+		return obj;
+	}, {})
+);
+
+class Token {
+	constructor(type, value, startPos, endPos) {
+		this.type = type;
+		this.value = value;
+		this.startPos = startPos;
+		this.endPos = endPos;
+	}
+
+	toString() {
+		return this.value !== undefined
+			? `<span class='token-value'>${this.value}</span>`
+			: `<span class='token-type'>${this.type.description}</span>`;
+	}
+}
+
+class Position {
+	constructor(idx, ln, col, fn, ftxt) {
+		this.idx = idx;
+		this.ln = ln;
+		this.col = col;
+		this.fn = fn;
+		this.ftxt = ftxt;
+	}
+
+	advance(currentChar) {
+		this.idx++;
+		this.col++;
+		if (currentChar === "\n") {
+			this.col = 0;
+			this.ln++;
+		}
+	}
+
+	copy() {
+		return new Position(this.idx, this.ln, this.col, this.fn, this.ftxt);
+	}
+}
+
+class BaseError {
+	constructor(startPos, endPos, name, details) {
+		this.startPos = startPos;
+		this.endPos = endPos;
+		this.name = name;
+		this.details = details;
+	}
+
+	toString() {
+		let resStr = `File <span class='token-value'>${
+			this.startPos.fn
+		}</span>, line <span class='token-value'>${
+			this.startPos.ln + 1
+		}</span> column <span class='token-value'>${
+			this.startPos.col + 1
+		}</span><br><br><span class='token-error'>${
+			this.name
+		}</span>: <span class='token-error-msg'>${this.details}</span>`;
+
+		return resStr;
+	}
+}
+
+class Error_UnknownChar extends BaseError {
+	constructor(startPos, endPos, details) {
+		super(startPos, endPos, "Unknown Character", details);
+	}
+}
+
+class Error_InvalidSyntax extends BaseError {
+	constructor(startPos, endPos, details) {
+		super(startPos, endPos, "Invalid Syntax", details);
+	}
+}
+
+class Error_Compilation extends BaseError {
+	constructor(startPos, endPos, details) {
+		super(startPos, endPos, "Compilation Error", details);
+	}
+}
+
+class Result {
+	constructor() {
+		this.value = undefined;
+		this.error = undefined;
+	}
+
+	register(res) {
+		if (res.error) this.error = res.error;
+		return res.value;
+	}
+
+	success(value) {
+		this.value = value;
+		return this;
+	}
+
+	fail(error) {
+		this.error = error;
+		return this;
+	}
+}
+
+class Compiler {
+	constructor(tokens, declaredVars) {
+		this.tokens = tokens;
+		this.declaredVars = [...declaredVars];
+		this.pos = -1;
+		this.advance();
+		this.instructions = [];
+		this.asmLang = document.getElementById("language").value;
+		this.regDest = document.getElementById("store-res").value;
+		this.isFloatMode = false;
+		this.lastMode = false;
+	}
+
+	advance() {
+		this.pos++;
+		if (this.pos < this.tokens.length)
+			this.currentTok = this.tokens[this.pos];
+	}
+
+	pushInstruction(inst, operands) {
+		const flags = ["NV", "CR", "EQ", "LE", "GT", "NE", "GE", "AL"];
+		let joinedOperands =
+			typeof operands === "string"
+				? [operands]
+				: operands
+						.map((operand) => {
+							operand = operand.toString();
+							if (flags.includes(operand))
+								return `<span class='token-flag'>${operand}</span>`;
+							if (operand.startsWith("#"))
+								return `<span class='token-value'>${operand}</span>`;
+							if (operand.endsWith("X"))
+								return `<span class='token-register'>${operand}</span>`;
+							if (
+								operand.startsWith("[") &&
+								operand.endsWith("X]")
+							)
+								return `[<span class='token-register'>${operand[1]}X</span>]`;
+							return operand;
+						})
+						.join(", ");
+
+		this.instructions.push(
+			`<span class='token-inst'>${inst}</span> ${joinedOperands}`
+		);
+	}
+
+	performConstantOperation(operatorType, rightTok, leftTok) {
+		if (rightTok.type !== TT.INT && rightTok.type !== TT.FLOAT) return null;
+
+		if (
+			leftTok !== undefined &&
+			leftTok.type !== TT.INT &&
+			leftTok.type !== TT.FLOAT
+		)
+			return null;
+
+		const left = leftTok !== undefined ? Number(leftTok.value) : 0;
+		const right = Number(rightTok.value);
+		let resultValue;
+		let resultType =
+			rightTok.type === TT.FLOAT ||
+			(leftTok !== undefined && leftTok.type === TT.FLOAT)
+				? TT.FLOAT
+				: TT.INT;
+
+		switch (operatorType) {
+			case "ADD":
+				resultValue = left + right;
+				break;
+			case "SUB":
+				resultValue = left - right;
+				break;
+			case "MUL":
+				resultValue = left * right;
+				break;
+			case "DIV":
+				if (right === 0) {
+					return null;
+				}
+				resultValue = left / right;
+				if (resultType === TT.INT) {
+					resultValue = Math.trunc(resultValue);
+				}
+				break;
+			case "MOD":
+				resultValue = left % right;
+				if (resultType === TT.INT) {
+					resultValue = Math.trunc(resultValue);
+				}
+				break;
+			case "POW":
+				resultValue = Math.pow(left, right);
+				break;
+			case "USUB":
+				resultValue = -right;
+				break;
+			case "UADD":
+				resultValue = right;
+				break;
+			default:
+				return null;
+		}
+
+		// Adjust result value and type for INT/FLOAT consistency
+		if (resultType === TT.INT) {
+			resultValue = Math.trunc(resultValue);
+			if (
+				!Number.isInteger(resultValue) &&
+				rightTok.type === TT.INT &&
+				leftTok.type === TT.INT
+			) {
+				resultType = TT.FLOAT;
+			}
+		} else {
+			resultType = TT.FLOAT;
+		}
+
+		const resultToken = new Token(
+			resultType,
+			String(resultValue),
+			leftTok !== undefined ? leftTok.startPos : rightTok.startPos,
+			rightTok.endPos
+		);
+		return resultToken;
+	}
+
+	pushImmediate(value) {
+		const maxPushImmediate = 0x3ff;
+		value = Number(value);
+		if (this.isFloatMode) value = this.floatToBitRepr(value);
+		if (value < 0) value += 65536; // Clamp result to range [0, 65535]
+
+		const hexValue = value.toString(16).padStart(3, "0");
+		if (this.lastMode) {
+			this.isFloatMode = true;
+			this.lastMode = false;
+		}
+
+		if (this.lastMode !== this.isFloatMode || !this.instructions) {
+			if (this.isFloatMode) this.pushInstruction("CMOD", ["float"]);
+			else this.pushInstruction("CMOD", ["int"]);
+		}
+
+		if (value <= maxPushImmediate)
+			this.pushInstruction("PSHI", [`#${hexValue}`]);
+		else {
+			this.pushInstruction("LDIA", [`#${hexValue.padStart(4, "0")}`]);
+			this.pushInstruction("PUSH", [this.regDest]);
+		}
+	}
+
+	compile() {
+		if (this.asmLang === "XenonASM") {
+			const xenonRes = this.compileXenon();
+			if (xenonRes.error) return xenonRes;
+			return xenonRes.success(this.optimizeXenonASM());
+		}
+		if (this.asmLang === "EmeraldASM") return this.compileEmerald();
+		return new Result().fail(
+			new Error_Compilation(
+				this.currentTok.startPos,
+				this.currentTok.endPos,
+				`Undefined assembly language: ${this.asmLang}`
+			)
+		);
+	}
+
+	compileXenon() {
+		const optStack = [];
+
+		const res = new Result();
+
+		while (this.pos < this.tokens.length) {
+			switch (true) {
+				case this.currentTok.type === TT.END:
+					if (this.pos < this.tokens.length - 1) {
+						this.pushInstruction("LDIS", ["#ffff"]);
+						optStack.length = 0;
+					}
+					this.advance();
+					break;
+
+				case this.currentTok.type === TT.INT:
+				case this.currentTok.type === TT.FLOAT:
+					let value = Number(this.currentTok.value);
+					optStack.push(this.currentTok);
+
+					this.lastMode = this.isFloatMode;
+					this.isFloatMode = this.currentTok.type === TT.FLOAT;
+
+					this.pushImmediate(value);
+					this.advance();
+					break;
+
+				case this.currentTok.type === TT.IDEN:
+					const varLocation = this.declaredVars.indexOf(
+						this.currentTok.value
+					);
+					if (varLocation === -1)
+						return res.fail(
+							new Error_Compilation(
+								this.currentTok.startPos,
+								this.currentTok.endPos,
+								`Variable ${this.currentTok} is undefined.`
+							)
+						);
+					this.pushInstruction("LDIB", [
+						"#" + varLocation.toString(16).padStart(4, "0"),
+					]);
+					this.pushInstruction("PUSH", ["[BX]"]);
+
+					optStack.push(this.currentTok);
+					this.advance();
+					break;
+
+				case this.currentTok.type.description in operators:
+					const isUnary =
+						this.currentTok.type.description.startsWith("U");
+					if (optStack.length < 2 - Number(isUnary)) {
+						return res.fail(
+							new Error_Compilation(
+								this.currentTok.startPos,
+								this.currentTok.endPos,
+								`Expected ${
+									2 - Number(isUnary)
+								} operands for operator ${
+									this.currentTok.type.description
+								}.`
+							)
+						);
+					}
+
+					const rightTok = optStack.pop();
+					let leftTok;
+					if (!isUnary) leftTok = optStack.pop();
+					const operatorType = this.currentTok.type.description;
+
+					const foldedResult = this.performConstantOperation(
+						operatorType,
+						rightTok,
+						leftTok
+					);
+
+					const removeNum = (value) => {
+						let valToRemove = value;
+						if (!Number.isInteger(value))
+							valToRemove = this.floatToBitRepr(value);
+
+						const hexValue = valToRemove
+							.toString(16)
+							.padStart(3, "0");
+						while (
+							this.instructions.length > 0 &&
+							this.instructions.at(-1).indexOf(hexValue) === -1
+						) {
+							this.instructions.splice(-1, 1);
+						}
+						this.instructions.splice(-1, 1);
+					};
+
+					if (foldedResult) {
+						removeNum(rightTok.value);
+						if (!isUnary) removeNum(leftTok.value);
+						this.pushImmediate(foldedResult.value);
+
+						optStack.push(foldedResult);
+						this.advance();
+						break;
+					}
+
+					if (this.currentTok.type.description === "ASGN") {
+						const varLocation = this.declaredVars.indexOf(
+							leftTok.value
+						);
+
+						if (varLocation === -1)
+							return res.fail(
+								new Error_Compilation(
+									leftTok.startPos,
+									leftTok.endPos,
+									`Variable ${leftTok} is undefined.`
+								)
+							);
+
+						this.pushInstruction("POP", [this.regDest]);
+						this.pushInstruction("LDIB", [
+							"#" + varLocation.toString(16).padStart(4, "0"),
+						]);
+						this.pushInstruction("STRE", ["[BX]", this.regDest]);
+						this.advance();
+						break;
+					}
+
+					if (isUnary) {
+						this.pushInstruction("LDIA", ["#0000"]);
+						this.pushInstruction("POP", ["DX"]);
+						this.pushInstruction(
+							this.currentTok.type.description.substr(1),
+							["AX", "DX", this.regDest]
+						);
+					} else {
+						this.pushInstruction("POP", ["AX"]); // right
+						this.pushInstruction("POP", ["DX"]); // left
+						this.pushInstruction(this.currentTok.type.description, [
+							"DX",
+							"AX",
+							this.regDest,
+						]);
+					}
+					optStack.push(rightTok);
+					this.pushInstruction("PUSH", [this.regDest]);
+					this.advance();
+					break;
+				default:
+					return res.fail(
+						new Error_InvalidSyntax(
+							this.currentTok.startPos,
+							this.currentTok.endPos,
+							`Unexpected token ${this.currentTok} during compilation.`
+						)
+					);
+			}
+		}
+
+		if (!this.instructions.at(-1).endsWith(this.regDest))
+			this.pushInstruction("POP", [this.regDest]);
+		this.pushInstruction("HALT", []);
+		return res.success(this.instructions);
+	}
+
+	optimizeXenonASM() {
+		let optimizedCode = [...this.instructions];
+		let changesMade = true;
+
+		const getArgs = (node) => {
+			const args = [];
+			for (let i = 0; i < node.childNodes.length; i++) {
+				if (
+					node.childNodes[i].tagName === "SPAN" &&
+					!node.childNodes[i].classList.contains("token-inst")
+				) {
+					args.push(node.childNodes[i].textContent.trim());
+				}
+			}
+			return args;
+		};
+
+		while (changesMade) {
+			changesMade = false;
+			let i = 0;
+			let nextOp, nextnextOp, nextArgs, nextnextArgs;
+
+			while (i < optimizedCode.length) {
+				const current = optimizedCode[i];
+				const next = optimizedCode[i + 1];
+				const nextNext = optimizedCode[i + 2];
+
+				const currentInst = document.createElement("p");
+				currentInst.innerHTML = current;
+				const op =
+					currentInst.getElementsByClassName("token-inst")[0]
+						.innerText;
+				const currentArgs = getArgs(currentInst);
+
+				if (next) {
+					const nextInst = document.createElement("p");
+					nextInst.innerHTML = next;
+					nextOp =
+						nextInst.getElementsByClassName("token-inst")[0]
+							.innerText;
+					nextArgs = getArgs(nextInst);
+				}
+
+				if (nextNext) {
+					const nextnextInst = document.createElement("p");
+					nextnextInst.innerHTML = nextNext;
+					nextnextOp =
+						nextnextInst.getElementsByClassName("token-inst")[0]
+							.innerText;
+					nextnextArgs = getArgs(nextnextInst);
+				}
+
+				console.log(op, nextOp);
+
+				if (op === "PUSH" && next && nextOp === "POP") {
+					if (currentArgs[0] === nextArgs[0]) {
+						optimizedCode.splice(i, 2);
+						changesMade = true;
+						continue;
+					}
+				}
+
+				if (op === "POP" && next && nextOp === "PUSH") {
+					if (currentArgs[0] === nextArgs[0]) {
+						optimizedCode.splice(i, 2);
+						changesMade = true;
+						continue;
+					}
+				}
+
+				if (
+					op === "PSHI" &&
+					next &&
+					nextOp === "POP" &&
+					currentArgs[0].startsWith("#") &&
+					nextArgs[0] === "AX"
+				) {
+					optimizedCode[
+						i
+					] = `<span class='token-inst'>LDIA</span> <span class='token-value'>#0${currentArgs[0].substr(
+						1
+					)}</span>`;
+					optimizedCode.splice(i + 1, 1);
+					changesMade = true;
+					continue;
+				}
+
+				if (op === "PUSH" && ((next && nextOp == "LDIS") || !next)) {
+					optimizedCode.splice(i, 1);
+					changesMade = true;
+					continue;
+				}
+
+				i++;
+			}
+		}
+
+		return optimizedCode;
+	}
+
+	compileEmerald() {
+		return new Result().success(["EmeraldASM is not supported yet."]);
+	}
+
+	floatToBitRepr(value) {
+		const buffer = new ArrayBuffer(2);
+		const dataView = new DataView(buffer);
+		dataView.setFloat16(0, value, false);
+		const uint16Value = dataView.getUint16(0, false);
+		const binaryString = uint16Value.toString(2);
+		return parseInt(binaryString, 2);
+	}
+}

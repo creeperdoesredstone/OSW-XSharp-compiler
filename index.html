@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>X# Compiler</title>
+
+		<link
+			rel="stylesheet"
+			href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/7.0.1/css/all.min.css"
+		/>
+		<link rel="stylesheet" href="style.css" />
+	</head>
+	<body>
+		<div class="container">
+			<h2>Config</h2>
+			<form>
+				<label for="language">Choose an assembly language:</label>
+				<select id="language" name="language">
+					<option value="XenonASM">XenonASM</option>
+					<option value="EmeraldASM">EmeraldASM</option>
+				</select>
+				<br />
+				<label for="store-res">Choose where to store the result:</label>
+				<select id="store-res" name="store-res">
+					<option value="AX">AX</option>
+					<option value="DX">DX</option>
+				</select>
+			</form>
+			<hr />
+			<h2>X# Compiler</h2>
+			<div class="buttons">
+				<button type="button" id="import-btn" title="Import">
+					<i class="fa-solid fa-file-import"></i> Import
+				</button>
+				<input type="file" id="file-input" style="display: none;" accept=".xs">
+				<button type="button" id="compile-btn" title="Compile">
+					<i class="fa-solid fa-play"></i> Compile
+				</button>
+			</div>
+			<div
+				contenteditable="true"
+				id="code"
+				autofocus="true"
+				class="div-code"
+			></div>
+			<div id="rpn-output" class="div-code">
+				<span class="label">RPN</span>
+			</div>
+			<div id="output" class="div-code">
+				<span class="label">Assembly Output</span>
+			</div>
+		</div>
+
+		<script src="compiler.js"></script>
+		<script src="script.js"></script>
+		<script src="index.js"></script>
+	</body>
+</html>
