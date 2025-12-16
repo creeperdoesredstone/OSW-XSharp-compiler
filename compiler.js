@@ -396,7 +396,7 @@ class Compiler {
 					optStack.push(this.currentTok);
 					this.advance();
 					break;
-				
+
 				case this.currentTok.type === TT.TOASSIGN:
 					optStack.push(this.currentTok);
 					this.advance();
@@ -479,7 +479,25 @@ class Compiler {
 								type: rightTok.type,
 							};
 						} else {
-							if (
+							if (rightTok.type === TT.IDEN) {
+								if (
+									this.symbolTable[leftTok.value].type !==
+									this.symbolTable[rightTok.value].type
+								) {
+									return res.fail(
+										new Error_Compilation(
+											rightTok.startPos,
+											rightTok.endPos,
+											`Cannot assign '${
+												rightTok.type.description
+											}' to '${
+												this.symbolTable[leftTok.value]
+													.type.description
+											}'.`
+										)
+									);
+								}
+							} else if (
 								rightTok.type !==
 								this.symbolTable[leftTok.value].type
 							) {
@@ -490,7 +508,8 @@ class Compiler {
 										`Cannot assign '${
 											rightTok.type.description
 										}' to '${
-											this.symbolTable[leftTok.value].type.description
+											this.symbolTable[leftTok.value].type
+												.description
 										}'.`
 									)
 								);
