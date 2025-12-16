@@ -521,6 +521,7 @@ class Compiler {
 							"#" + varLocation.toString(16).padStart(4, "0"),
 						]);
 						this.pushInstruction("STRE", ["[BX]", this.regDest]);
+						this.pushInstruction("PUSH", [this.regDest]);
 						this.advance();
 						break;
 					}
@@ -673,3 +674,4 @@ class Compiler {
 		return parseInt(binaryString, 2);
 	}
 }
+
