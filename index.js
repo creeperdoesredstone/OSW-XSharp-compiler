@@ -47,6 +47,10 @@ const toggleLanguageStuff = () => {
 	}
 };
 
+const checkValidExport = () => {
+	exportBtn.disabled = document.getElementById("fn").value.length == 0;
+};
+
 fileInput.addEventListener("change", (event) => {
 	const output = document.getElementById("code");
 	const file = event.target.files[0];
@@ -66,6 +70,7 @@ fileInput.addEventListener("change", (event) => {
 
 showRPNCheck.addEventListener("change", checkRPNState);
 language.addEventListener("change", toggleLanguageStuff);
+document.getElementById("fn").addEventListener("input", checkValidExport);
 
 exportBtn.addEventListener("click", () => {
 	downloadFile(document.getElementById("fn").value);
@@ -73,3 +78,4 @@ exportBtn.addEventListener("click", () => {
 
 checkRPNState();
 toggleLanguageStuff();
+checkValidExport();
