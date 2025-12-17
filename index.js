@@ -2,6 +2,7 @@ const importBtn = document.getElementById("import-btn");
 const fileInput = document.getElementById("file-input");
 const exportBtn = document.getElementById("export-btn");
 const showRPNCheck = document.getElementById("show-rpn");
+const language = document.getElementById("language");
 
 importBtn.addEventListener("click", () => {
 	fileInput.click();
@@ -13,7 +14,7 @@ const checkRPNState = () => {
 	else rpnDisplay.style = "";
 };
 
-function downloadFile(fn) {
+const downloadFile = (fn) => {
 	var textToWrite = document
 		.getElementById("code")
 		.innerText.replace(" ", " ");
@@ -28,7 +29,23 @@ function downloadFile(fn) {
 	downloadLink.click();
 	document.body.removeChild(downloadLink);
 	window.URL.revokeObjectURL(downloadLink.href);
-}
+};
+
+const toggleLanguageStuff = () => {
+	const dtInt = document.getElementById("dt-int");
+	const dtFloat = document.getElementById("dt-float");
+
+	switch (language.value) {
+		case "XenonASM":
+			dtInt.innerText = "int16";
+			dtFloat.innerText = "fp16 (bias = 15)";
+			break;
+		case "EmeraldASM":
+			dtInt.innerText = "int8";
+			dtFloat.innerText = "fp8 (bias = 7)";
+			break;
+	}
+};
 
 fileInput.addEventListener("change", (event) => {
 	const output = document.getElementById("code");
@@ -48,9 +65,11 @@ fileInput.addEventListener("change", (event) => {
 });
 
 showRPNCheck.addEventListener("change", checkRPNState);
+language.addEventListener("change", toggleLanguageStuff);
 
 exportBtn.addEventListener("click", () => {
-	downloadFile(document.getElementById("fn").value)
-})
+	downloadFile(document.getElementById("fn").value);
+});
 
 checkRPNState();
+toggleLanguageStuff();

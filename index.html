@@ -118,14 +118,14 @@
 					</tr>
 					<tr>
 						<td><code class="token-inst">int</code></td>
-						<td>int16</td>
+						<td id="dt-int">int16</td>
 						<td>
 							<code>123</code>, <code>0</code>, <code>-57</code>
 						</td>
 					</tr>
 					<tr>
 						<td><code class="token-inst">float</code></td>
-						<td>fp16 (bias = 15)</td>
+						<td id="dt-float">fp16 (bias = 15)</td>
 						<td>
 							<code>3.125</code>, <code>0.0625</code>,
 							<code>-10.5</code>
@@ -187,7 +187,7 @@
 					Variables are declared using the <code>var</code> keyword as
 					follows:
 				</p>
-				<div class="code-block">var identifier = expr;</div>
+				<div class="code-block">var identifier: dataType = expr;</div>
 
 				<p>
 					Currently, the variable's data type is inferred
@@ -207,7 +207,7 @@
 					For example, if we have this code then the compiler would
 					throw an error:
 				</p>
-				<div class="code-block">var a = 14;<br />a = 2.0;</div>
+				<div class="code-block">var a: int = 14;<br />a = 2.0;</div>
 			</details>
 			<details>
 				<summary>Parsing</summary>
