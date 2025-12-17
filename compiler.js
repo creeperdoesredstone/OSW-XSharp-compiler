@@ -35,6 +35,30 @@ const operators = {
 		prec: 1,
 		assoc: "right",
 	},
+	ADDBY: {
+		prec: 1,
+		assoc: "right",
+	},
+	SUBBY: {
+		prec: 1,
+		assoc: "right",
+	},
+	MULBY: {
+		prec: 1,
+		assoc: "right",
+	},
+	DIVBY: {
+		prec: 1,
+		assoc: "right",
+	},
+	MODBY: {
+		prec: 1,
+		assoc: "right",
+	},
+	POWBY: {
+		prec: 1,
+		assoc: "right",
+	},
 };
 const ttList = [
 	"EOF",
@@ -54,16 +78,16 @@ const ttList = [
 	"DIV",
 	"MOD",
 	"POW",
+	"ADDBY",
+	"SUBBY",
+	"MULBY",
+	"DIVBY",
+	"MODBY",
+	"POWBY",
 	"ASGN",
 	"LPR",
 	"RPR",
 ];
-const KEYWORDS = ["var", "const"];
-const DATATYPES = ["int", "float"];
-KEYWORDS.push(...DATATYPES);
-const DIGITS = "0123456789";
-const LETTERS = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
-const VALID_IDEN = LETTERS + DIGITS + "_";
 
 const TT = Object.freeze(
 	ttList.reduce((obj, item) => {
@@ -71,6 +95,15 @@ const TT = Object.freeze(
 		return obj;
 	}, {})
 );
+
+const KEYWORDS = ["var", "const"];
+const DATATYPES = ["int", "float"];
+KEYWORDS.push(...DATATYPES);
+const DIGITS = "0123456789";
+const LETTERS = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
+const VALID_IDEN = LETTERS + DIGITS + "_";
+
+const varOperators = ["ADDBY", "SUBBY", "MULBY", "DIVBY", "MODBY", "POWBY"];
 
 class Token {
 	constructor(type, value, startPos, endPos) {
@@ -81,9 +114,11 @@ class Token {
 	}
 
 	toString() {
-		return this.value !== undefined
-			? `<span class='token-value'>${this.value}</span>`
-			: `<span class='token-type'>${this.type.description}</span>`;
+		let result =
+			this.value !== undefined
+				? `<span class='token-value'>${this.value}</span>`
+				: `<span class='token-type'>${this.type.description}</span>`;
+		return result;
 	}
 }
 
@@ -370,7 +405,6 @@ class Compiler {
 
 	emerald_pushImmediate(value) {
 		if (this.isFloatMode) value = this.fp8ToBitRepr(value);
-		console.log(value);
 		if (value < 0) value += 256; // Clamp result to range [0, 255]
 
 		const hexValue = value.toString(16).padStart(2, "0");
@@ -533,7 +567,7 @@ class Compiler {
 						break;
 					}
 
-					if (this.currentTok.type.description === "ASGN") {
+					if (this.currentTok.type === TT.ASGN) {
 						const varLocation = this.declaredVars.indexOf(
 							leftTok.value
 						);
@@ -608,6 +642,83 @@ class Compiler {
 						this.pushInstruction("PUSH", [this.regDest]);
 						this.advance();
 						break;
+					} else if (
+						this.currentTok.type.description.endsWith("BY")
+					) {
+						const varLocation = this.declaredVars.indexOf(
+							leftTok.value
+						);
+						if (varLocation === -1)
+							return res.fail(
+								new Error_Compilation(
+									leftTok.startPos,
+									leftTok.endPos,
+									`Variable ${leftTok} is undefined.`
+								)
+							);
+
+						if (this.symbolTable[leftTok.value].isConst)
+							return res.fail(
+								new Error_Compilation(
+									leftTok.startPos,
+									leftTok.endPos,
+									`Cannot assign to constant ${leftTok.value}.`
+								)
+							);
+
+						if (rightTok.type === TT.IDEN) {
+							if (
+								this.symbolTable[leftTok.value].type !==
+								this.symbolTable[rightTok.value].type
+							) {
+								return res.fail(
+									new Error_Compilation(
+										rightTok.startPos,
+										rightTok.endPos,
+										`Cannot assign '${
+											rightTok.type.description
+										}' to '${
+											this.symbolTable[leftTok.value].type
+												.description
+										}'.`
+									)
+								);
+							}
+						} else if (
+							rightTok.type !==
+							this.symbolTable[leftTok.value].type
+						) {
+							return res.fail(
+								new Error_Compilation(
+									rightTok.startPos,
+									rightTok.endPos,
+									`Cannot assign '${
+										rightTok.type.description
+									}' to '${
+										this.symbolTable[leftTok.value].type
+											.description
+									}'.`
+								)
+							);
+						}
+						const op = this.currentTok.type.description.substr(
+							0,
+							3
+						);
+
+						this.pushInstruction("POP", [this.regDest]);
+						this.pushInstruction("LDIB", [
+							"#" + varLocation.toString(16).padStart(4, "0"),
+						]);
+						this.pushInstruction(op, [
+							this.regDest,
+							"[BX]",
+							["BX"],
+						]);
+						this.pushInstruction("MOVE", ["BX", this.regDest]);
+						this.pushInstruction("PUSH", [this.regDest]);
+						this.advance();
+						break;
 					}
 
 					if (isUnary) {
@@ -650,6 +761,7 @@ class Compiler {
 	optimizeXenonASM() {
 		let optimizedCode = [...this.instructions];
 		let changesMade = true;
+		let lineStart = 0;
 
 		const getArgs = (node) => {
 			const args = [];
@@ -697,6 +809,27 @@ class Compiler {
 						nextnextInst.getElementsByClassName("token-inst")[0]
 							.innerText;
 					nextnextArgs = getArgs(nextnextInst);
+				}
+
+				if (op === "LDIS" && currentArgs[0] === "#ffff") {
+					const line = optimizedCode.slice(lineStart, i + 1);
+					const pushIdx = line.find((instruction) => {
+						instruction.startsWith(
+							"<span class='token-inst'>PUSH</span>"
+						);
+					});
+					lineStart = i + 1;
+					if (pushIdx === undefined) {
+						optimizedCode.splice(i, 1);
+						changesMade = true;
+						continue;
+					}
+				}
+
+				if (op === "CMOD" && next && nextOp === "CMOD") {
+					optimizedCode.splice(i, 1);
+					changesMade = true;
+					continue;
 				}
 
 				if (op === "PUSH" && next && nextOp === "POP") {
@@ -922,6 +1055,84 @@ class Compiler {
 						this.pushInstruction("PSH", [this.regDest]);
 						this.advance();
 						break;
+					} else if (
+						this.currentTok.type.description.endsWith("BY")
+					) {
+						const varLocation = this.declaredVars.indexOf(
+							leftTok.value
+						);
+						if (varLocation === -1)
+							return res.fail(
+								new Error_Compilation(
+									leftTok.startPos,
+									leftTok.endPos,
+									`Variable ${leftTok} is undefined.`
+								)
+							);
+
+						if (this.symbolTable[leftTok.value].isConst)
+							return res.fail(
+								new Error_Compilation(
+									leftTok.startPos,
+									leftTok.endPos,
+									`Cannot assign to constant ${leftTok.value}.`
+								)
+							);
+
+						if (rightTok.type === TT.IDEN) {
+							if (
+								this.symbolTable[leftTok.value].type !==
+								this.symbolTable[rightTok.value].type
+							) {
+								return res.fail(
+									new Error_Compilation(
+										rightTok.startPos,
+										rightTok.endPos,
+										`Cannot assign '${
+											rightTok.type.description
+										}' to '${
+											this.symbolTable[leftTok.value].type
+												.description
+										}'.`
+									)
+								);
+							}
+						} else if (
+							rightTok.type !==
+							this.symbolTable[leftTok.value].type
+						) {
+							return res.fail(
+								new Error_Compilation(
+									rightTok.startPos,
+									rightTok.endPos,
+									`Cannot assign '${
+										rightTok.type.description
+									}' to '${
+										this.symbolTable[leftTok.value].type
+											.description
+									}'.`
+								)
+							);
+						}
+						const op = this.currentTok.type.description.substr(
+							0,
+							3
+						);
+
+						this.pushInstruction("POP", [this.regDest]);
+						this.pushInstruction("LDI", [
+							"BX",
+							".var-" + leftTok.value,
+						]);
+						this.pushInstruction(op, [
+							this.regDest,
+							"[BX]",
+							["BX"],
+						]);
+						this.pushInstruction("MOV", ["BX", this.regDest]);
+						this.pushInstruction("PSH", [this.regDest]);
+						this.advance();
+						break;
 					}
 
 					if (isUnary) {
@@ -1095,7 +1306,6 @@ class Compiler {
 
 			result = `${signStr}${exponentStr}${mantissaStr}`;
 		}
-		console.log(result);
 		return parseInt(result, 2);
 	}
 

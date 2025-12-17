@@ -10,6 +10,10 @@ class Lexer {
 		this.pos.advance(this.currentChar);
 		this.currentChar =
 			this.pos.idx < this.ftxt.length ? this.ftxt[this.pos.idx] : null;
+		this.nextChar =
+			this.pos.idx < this.ftxt.length - 1
+				? this.ftxt[this.pos.idx + 1]
+				: null;
 	}
 
 	lex() {
@@ -19,6 +23,7 @@ class Lexer {
 		while (this.currentChar !== null) {
 			lastTokType =
 				tokens.length > 0 ? tokens.at(-1).type.description : null;
+			startPos = this.pos.copy();
 			switch (true) {
 				case this.currentChar === " ":
 				case this.currentChar === "\t":
@@ -57,12 +62,16 @@ class Lexer {
 						lastTokType === "SEMI"
 					)
 						ttype = TT.UADD;
+					if (this.nextChar === "=") {
+						ttype = TT.ADDBY;
+						this.advance();
+					}
 
 					tokens.push(
 						new Token(
 							ttype,
 							undefined,
-							this.pos.copy(),
+							startPos,
 							this.pos.copy()
 						)
 					);
@@ -77,56 +86,80 @@ class Lexer {
 						lastTokType === "SEMI"
 					)
 						ttype = TT.USUB;
+					if (this.nextChar === "=") {
+						ttype = TT.SUBBY;
+						this.advance();
+					}
 
 					tokens.push(
 						new Token(
 							ttype,
 							undefined,
-							this.pos.copy(),
+							startPos,
 							this.pos.copy()
 						)
 					);
 					this.advance();
 					break;
 				case this.currentChar === "*":
+					ttype = TT.MUL
+					if (this.nextChar === "=") {
+						ttype = TT.MULBY;
+						this.advance();
+					}
 					tokens.push(
 						new Token(
-							TT.MUL,
+							ttype,
 							undefined,
-							this.pos.copy(),
+							startPos,
 							this.pos.copy()
 						)
 					);
 					this.advance();
 					break;
 				case this.currentChar === "/":
+					ttype = TT.DIV
+					if (this.nextChar === "=") {
+						ttype = TT.DIVBY;
+						this.advance();
+					}
 					tokens.push(
 						new Token(
-							TT.DIV,
+							ttype,
 							undefined,
-							this.pos.copy(),
+							startPos,
 							this.pos.copy()
 						)
 					);
 					this.advance();
 					break;
 				case this.currentChar === "%":
+					ttype = TT.MOD
+					if (this.nextChar === "=") {
+						ttype = TT.MODBY;
+						this.advance();
+					}
 					tokens.push(
 						new Token(
-							TT.MOD,
+							ttype,
 							undefined,
-							this.pos.copy(),
+							startPos,
 							this.pos.copy()
 						)
 					);
 					this.advance();
 					break;
 				case this.currentChar === "^":
+					ttype = TT.POW
+					if (this.nextChar === "=") {
+						ttype = TT.POWBY;
+						this.advance();
+					}
 					tokens.push(
 						new Token(
-							TT.POW,
+							ttype,
 							undefined,
-							this.pos.copy(),
+							startPos,
 							this.pos.copy()
 						)
 					);
@@ -400,7 +433,10 @@ class Parser {
 						}
 
 						const targetName = targetTok.value || "";
-						if (this.readOnlyVars.has(targetName) && !this.nextIdenForAssignment) {
+						if (
+							this.readOnlyVars.has(targetName) &&
+							!this.nextIdenForAssignment
+						) {
 							return res.fail(
 								new Error_InvalidSyntax(
 									o1.startPos,

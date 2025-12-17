@@ -3,6 +3,8 @@ const fileInput = document.getElementById("file-input");
 const exportBtn = document.getElementById("export-btn");
 const showRPNCheck = document.getElementById("show-rpn");
 const language = document.getElementById("language");
+const tabSlider = document.getElementById("tab-size");
+const tabOut = document.getElementById("tab-size-display");
 
 importBtn.addEventListener("click", () => {
 	fileInput.click();
@@ -17,7 +19,8 @@ const checkRPNState = () => {
 const downloadFile = (fn) => {
 	var textToWrite = document
 		.getElementById("code")
-		.innerText.replace(" ", " ");
+		.innerText.replace("	", "\t")
+		.replace(" ", " ");
 	const fileNameToSaveAs = fn + ".xs";
 	const textFileAsBlob = new Blob([textToWrite], { type: "text/plain" });
 
@@ -62,7 +65,9 @@ fileInput.addEventListener("change", (event) => {
 
 	reader.onload = (e) => {
 		const content = e.target.result;
-		output.innerText = content.replace("\t", "    ");
+		output.innerText = content.replace("\t", "	");
+		document.getElementById("fn").value = file.name.replace(".xs", "");
+		exportBtn.disabled = false;
 	};
 
 	reader.readAsText(file);
@@ -74,6 +79,29 @@ document.getElementById("fn").addEventListener("input", checkValidExport);
 
 exportBtn.addEventListener("click", () => {
 	downloadFile(document.getElementById("fn").value);
+});
+
+document.getElementById("code").addEventListener("keydown", (event) => {
+	if (event.key === "Tab") {
+		event.preventDefault();
+		const selection = window.getSelection();
+		if (selection.rangeCount > 0) {
+			const range = selection.getRangeAt(0);
+			range.deleteContents();
+			const node = document.createTextNode("	");
+			range.insertNode(node);
+
+			range.setStartAfter(node);
+			range.setEndAfter(node);
+			selection.removeAllRanges();
+			selection.addRange(range);
+		}
+	}
+});
+
+tabSlider.addEventListener("input", () => {
+	tabOut.innerText = tabSlider.value;
+	document.documentElement.style.setProperty("--tab-size-val", tabSlider.value);
 });
 
 checkRPNState();

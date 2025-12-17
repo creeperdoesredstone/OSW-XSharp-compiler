@@ -37,12 +37,26 @@
 
 			<h2>Configure Workspace</h2>
 			<form>
-				<label for="show-rpn">Show RPN?&nbsp;</label>
-				<input type="checkbox" id="show-rpn" name="show-rpn" />
-				<br />
 				<label for="fn">File name:</label>
 				<input type="text" id="fn" name="fn" />
 				<span>.xs</span>
+				<br />
+
+				<label for="show-rpn">Show RPN?&nbsp;</label>
+				<input type="checkbox" id="show-rpn" name="show-rpn" />
+				<br />
+
+				<label for="tab-size">Tab size:&nbsp;</label>
+				<input
+					type="range"
+					title="Tab size"
+					id="tab-size"
+					name="tab-size"
+					min="2"
+					max="8"
+					value="4"
+				/>
+				<span id="tab-size-display">4</span>
 			</form>
 
 			<hr />
@@ -66,7 +80,7 @@
 				</button>
 			</div>
 			<div
-				contenteditable="true"
+				contenteditable="plaintext-only"
 				id="code"
 				autofocus="true"
 				class="div-code"
@@ -127,7 +141,7 @@
 						<td><code class="token-inst">float</code></td>
 						<td id="dt-float">fp16 (bias = 15)</td>
 						<td>
-							<code>3.125</code>, <code>0.0625</code>,
+							<code>3.25</code>, <code>0.0625</code>,
 							<code>-10.5</code>
 						</td>
 					</tr>
@@ -210,10 +224,8 @@
 					as follows:
 				</p>
 				<div class="code-block">const identifier: dataType = expr;</div>
-				<p>
-					Once declared, the value of a constant cannot be changed.
-					Doing the following would result in an error:
-				</p>
+				<p>Once declared, the value of a constant cannot be changed.</p>
+				<p>Doing the following would result in an error:</p>
 				<div class="code-block">const a: int = 14;<br />a = 2;</div>
 			</details>
 			<details>

@@ -4,6 +4,10 @@
 	font-family: "JetBrains Mono", monospace;
 }
 
+:root {
+	--tab-size-val: 4;
+}
+
 body {
 	min-height: 100vh;
 	height: 100vh;
@@ -73,12 +77,17 @@ option:hover {
 	color: white;
 	padding: 12px;
 	border-radius: 8px;
+	tab-size: var(--tab-size-val);
 	scrollbar-width: none;
 	position: relative;
 	z-index: auto;
 	word-wrap: break-word;
 	word-break: break-all;
 	caret-color: cyan;
+}
+
+#code {
+	white-space: pre;
 }
 
 .div-code::after {
@@ -230,6 +239,7 @@ option:hover {
 
 details {
 	align-self: flex-start;
+	width: 80%;
 }
 
 summary {
