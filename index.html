@@ -30,8 +30,12 @@
 
 			<h2>Configure Workspace</h2>
 			<form>
-				<label for="show-rpn">Show RPN?</label>
+				<label for="show-rpn">Show RPN?&nbsp;</label>
 				<input type="checkbox" id="show-rpn" name="show-rpn" />
+				<br />
+				<label for="fn">File name:</label>
+				<input type="text" id="fn" name="fn" />
+				<span>.xs</span>
 			</form>
 
 			<hr />
@@ -40,6 +44,9 @@
 			<div class="buttons">
 				<button type="button" id="import-btn" title="Import">
 					<i class="fa-solid fa-file-import"></i> Import
+				</button>
+				<button type="button" id="export-btn" title="Export">
+					<i class="fa-solid fa-file-export"></i> Export
 				</button>
 				<input
 					type="file"
@@ -79,18 +86,11 @@
 					developing assembly programs.
 				</p>
 				<p>
-					Now, it is used for
+					Now, it is mainly used for
 					<span class="highlight">creeperdoesredstone</span>'s new
 					<span class="highlight">Xenon-124 VM</span> in
-					<span class="token-register">OS Wars 26.</span>
-				</p>
-				<br />
-				<p>
-					The ISA for the Xenon-124 VM can be found
-					<a
-						href="https://docs.google.com/spreadsheets/d/1lWkRa2bWt4Imss0K8sfAVuTmYVx9m5RivHfTwb5bBWM/edit?usp=sharing"
-						>here</a
-					>.
+					<span class="token-register">OS Wars 26</span>, but more VMs
+					can be implemented if necessary.
 				</p>
 			</details>
 			<details>
@@ -120,8 +120,8 @@
 						<td><code class="token-inst">float</code></td>
 						<td>fp16 (bias = 15)</td>
 						<td>
-							<code>3.1415</code>, <code>0.0625</code>,
-							<code>-1000.5</code>
+							<code>3.125</code>, <code>0.0625</code>,
+							<code>-10.5</code>
 						</td>
 					</tr>
 				</table>
@@ -236,7 +236,18 @@
 						by
 						<a
 							href="https://scratch.mit.edu/users/creeperdoesredstone/"
+							target="_blank"
+							rel="noopener"
 							>creeperdoesredstone</a
+						>.
+					</p>
+					<p>
+						The ISA for the Xenon-124 VM can be found
+						<a
+							href="https://docs.google.com/spreadsheets/d/1lWkRa2bWt4Imss0K8sfAVuTmYVx9m5RivHfTwb5bBWM/edit?usp=sharing"
+							target="_blank"
+							rel="noopener"
+							>here</a
 						>.
 					</p>
 					<br />

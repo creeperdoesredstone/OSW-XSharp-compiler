@@ -59,9 +59,11 @@ const ttList = [
 	"RPR",
 ];
 const KEYWORDS = ["var"];
+const DATATYPES = ["int", "float"];
+KEYWORDS.push(...DATATYPES);
 const DIGITS = "0123456789";
 const LETTERS = "abcdefghijklmnopqrstuvwxyz";
-const VALID_IDEN = LETTERS + DIGITS + "_-";
+const VALID_IDEN = LETTERS + DIGITS + "_";
 
 const TT = Object.freeze(
 	ttList.reduce((obj, item) => {
@@ -172,13 +174,13 @@ class Result {
 }
 
 class Compiler {
-	constructor(tokens, declaredVars) {
+	constructor(tokens, declaredVars, asmLang) {
 		this.tokens = tokens;
 		this.declaredVars = [...declaredVars];
+		this.asmLang = asmLang;
 		this.pos = -1;
 		this.advance();
 		this.instructions = [];
-		this.asmLang = document.getElementById("language").value;
 		this.regDest = document.getElementById("store-res").value;
 		this.isFloatMode = false;
 		this.lastMode = false;
@@ -204,6 +206,8 @@ class Compiler {
 								return `<span class='token-flag'>${operand}</span>`;
 							if (operand.startsWith("#"))
 								return `<span class='token-value'>${operand}</span>`;
+							if (operand.startsWith("."))
+								return `<span class='label'>${operand}</span>`;
 							if (operand.endsWith("X"))
 								return `<span class='token-register'>${operand}</span>`;
 							if (
@@ -211,7 +215,7 @@ class Compiler {
 								operand.endsWith("X]")
 							)
 								return `[<span class='token-register'>${operand[1]}X</span>]`;
-							return operand;
+							return `<span>${operand}</span>`;
 						})
 						.join(", ");
 
@@ -220,7 +224,7 @@ class Compiler {
 		);
 	}
 
-	performConstantOperation(operatorType, rightTok, leftTok) {
+	xenon_constOperation(operatorType, rightTok, leftTok) {
 		const res = new Result();
 		if (rightTok.type !== TT.INT && rightTok.type !== TT.FLOAT)
 			return res.success(null);
@@ -308,10 +312,10 @@ class Compiler {
 		return res.success(resultToken);
 	}
 
-	pushImmediate(value) {
+	xenon_pushImmediate(value) {
 		const maxPushImmediate = 0x3ff;
 		value = Number(value);
-		if (this.isFloatMode) value = this.floatToBitRepr(value);
+		if (this.isFloatMode) value = this.fp16ToBitRepr(value);
 		if (value < 0) value += 65536; // Clamp result to range [0, 65535]
 
 		const hexValue = value.toString(16).padStart(3, "0");
@@ -333,13 +337,37 @@ class Compiler {
 		}
 	}
 
+	emerald_pushImmediate(value) {
+		if (this.isFloatMode) value = this.fp8ToBitRepr(value);
+		console.log(value);
+		if (value < 0) value += 256; // Clamp result to range [0, 255]
+
+		const hexValue = value.toString(16).padStart(2, "0");
+		if (this.lastMode) {
+			this.isFloatMode = true;
+			this.lastMode = false;
+		}
+
+		if (this.lastMode !== this.isFloatMode || !this.instructions) {
+			if (this.isFloatMode) this.pushInstruction("AMD", ["float"]);
+			else this.pushInstruction("AMD", ["int"]);
+		}
+		this.pushInstruction("PSH", [`#${hexValue}`]);
+	}
+
 	compile() {
 		if (this.asmLang === "XenonASM") {
 			const xenonRes = this.compileXenon();
 			if (xenonRes.error) return xenonRes;
 			return xenonRes.success(this.optimizeXenonASM());
 		}
-		if (this.asmLang === "EmeraldASM") return this.compileEmerald();
+		if (this.asmLang === "EmeraldASM") {
+			const emRes = this.compileEmerald();
+			if (emRes.error) return emRes;
+			this.instructions = [...this.optimizeEmeraldASM()];
+			this.emerald_padVars();
+			return emRes.success(this.instructions);
+		}
 		return new Result().fail(
 			new Error_Compilation(
 				this.currentTok.startPos,
@@ -372,7 +400,7 @@ class Compiler {
 					this.lastMode = this.isFloatMode;
 					this.isFloatMode = this.currentTok.type === TT.FLOAT;
 
-					this.pushImmediate(value);
+					this.xenon_pushImmediate(value);
 					this.advance();
 					break;
 
@@ -425,7 +453,7 @@ class Compiler {
 					const operatorType = this.currentTok.type.description;
 
 					const foldedResult = res.register(
-						this.performConstantOperation(
+						this.xenon_constOperation(
 							operatorType,
 							rightTok,
 							leftTok
@@ -436,7 +464,7 @@ class Compiler {
 					const removeNum = (value) => {
 						let valToRemove = value;
 						if (!Number.isInteger(value))
-							valToRemove = this.floatToBitRepr(value);
+							valToRemove = this.fp16ToBitRepr(value);
 
 						const hexValue = valToRemove
 							.toString(16)
@@ -453,7 +481,7 @@ class Compiler {
 					if (foldedResult) {
 						removeNum(rightTok.value);
 						if (!isUnary) removeNum(leftTok.value);
-						this.pushImmediate(foldedResult.value);
+						this.xenon_pushImmediate(foldedResult.value);
 
 						optStack.push(foldedResult);
 						this.advance();
@@ -662,10 +690,360 @@ class Compiler {
 	}
 
 	compileEmerald() {
-		return new Result().success(["EmeraldASM is not supported yet."]);
+		const optStack = [];
+		const res = new Result();
+
+		while (this.pos < this.tokens.length) {
+			switch (true) {
+				case this.currentTok.type === TT.INT:
+				case this.currentTok.type === TT.FLOAT:
+					let value = Number(this.currentTok.value);
+					optStack.push(this.currentTok);
+
+					this.lastMode = this.isFloatMode;
+					this.isFloatMode = this.currentTok.type === TT.FLOAT;
+
+					this.emerald_pushImmediate(value);
+					this.advance();
+					break;
+
+				case this.currentTok.type === TT.IDEN:
+					const varLocation = this.declaredVars.indexOf(
+						this.currentTok.value
+					);
+					if (varLocation === -1)
+						return res.fail(
+							new Error_Compilation(
+								this.currentTok.startPos,
+								this.currentTok.endPos,
+								`Variable ${this.currentTok} is undefined.`
+							)
+						);
+					this.pushInstruction("LDI", [
+						"BX",
+						".var-" + this.currentTok.value,
+					]);
+					this.pushInstruction("PSH", ["[BX]"]);
+
+					optStack.push(this.currentTok);
+					this.advance();
+					break;
+
+				case this.currentTok.type === TT.END:
+					if (this.pos < this.tokens.length - 1) {
+						this.pushInstruction("LDI", ["SX", "#0f"]);
+						this.pushInstruction("LDP", ["SP s", "#ff"]);
+						optStack.length = 0;
+					}
+					this.advance();
+					break;
+
+				case this.currentTok.type === TT.TOASSIGN:
+					optStack.push(this.currentTok);
+					this.advance();
+					break;
+
+				case this.currentTok.type.description in operators:
+					const isUnary =
+						this.currentTok.type.description.startsWith("U");
+					if (optStack.length < 2 - Number(isUnary)) {
+						return res.fail(
+							new Error_Compilation(
+								this.currentTok.startPos,
+								this.currentTok.endPos,
+								`Expected ${
+									2 - Number(isUnary)
+								} operands for operator ${
+									this.currentTok.type.description
+								}.`
+							)
+						);
+					}
+
+					const rightTok = optStack.pop();
+					let leftTok;
+					if (!isUnary) leftTok = optStack.pop();
+					const operatorType = this.currentTok.type.description;
+
+					const foldedResult = res.register(
+						this.xenon_constOperation(
+							operatorType,
+							rightTok,
+							leftTok
+						)
+					);
+					if (res.error) return res;
+
+					const removeNum = (value) => {
+						let valToRemove = value;
+						if (!Number.isInteger(value))
+							valToRemove = this.fp16ToBitRepr(value);
+
+						const hexValue = valToRemove
+							.toString(16)
+							.padStart(3, "0");
+						while (
+							this.instructions.length > 0 &&
+							this.instructions.at(-1).indexOf(hexValue) === -1
+						) {
+							this.instructions.splice(-1, 1);
+						}
+						this.instructions.splice(-1, 1);
+					};
+
+					if (foldedResult) {
+						removeNum(rightTok.value);
+						if (!isUnary) removeNum(leftTok.value);
+						this.emerald_pushImmediate(foldedResult.value);
+
+						optStack.push(foldedResult);
+						this.advance();
+						break;
+					}
+
+					if (this.currentTok.type.description === "ASGN") {
+						const varLocation = this.declaredVars.indexOf(
+							leftTok.value
+						);
+						if (varLocation === -1)
+							return res.fail(
+								new Error_Compilation(
+									leftTok.startPos,
+									leftTok.endPos,
+									`Variable ${leftTok} is undefined.`
+								)
+							);
+
+						if (!(leftTok.value in this.symbolTable)) {
+							this.symbolTable[leftTok.value] = {
+								location: varLocation,
+								type: rightTok.type,
+							};
+						} else {
+							if (rightTok.type === TT.IDEN) {
+								if (
+									this.symbolTable[leftTok.value].type !==
+									this.symbolTable[rightTok.value].type
+								) {
+									return res.fail(
+										new Error_Compilation(
+											rightTok.startPos,
+											rightTok.endPos,
+											`Cannot assign '${
+												rightTok.type.description
+											}' to '${
+												this.symbolTable[leftTok.value]
+													.type.description
+											}'.`
+										)
+									);
+								}
+							} else if (
+								rightTok.type !==
+								this.symbolTable[leftTok.value].type
+							) {
+								return res.fail(
+									new Error_Compilation(
+										rightTok.startPos,
+										rightTok.endPos,
+										`Cannot assign '${
+											rightTok.type.description
+										}' to '${
+											this.symbolTable[leftTok.value].type
+												.description
+										}'.`
+									)
+								);
+							}
+						}
+
+						this.pushInstruction("POP", [this.regDest]);
+						this.pushInstruction("LDI", [
+							"BX",
+							".var-" + leftTok.value,
+						]);
+						this.pushInstruction("STR", ["[BX]", this.regDest]);
+						this.pushInstruction("PSH", [this.regDest]);
+						this.advance();
+						break;
+					}
+
+					if (isUnary) {
+						this.pushInstruction("LDI", ["AX", "#0000"]);
+						this.pushInstruction("POP", ["DX"]);
+						this.pushInstruction(
+							this.currentTok.type.description.substr(1),
+							["AX", "DX", this.regDest]
+						);
+					} else {
+						this.pushInstruction("POP", ["AX"]); // right
+						this.pushInstruction("POP", ["DX"]); // left
+						this.pushInstruction(this.currentTok.type.description, [
+							"DX",
+							"AX",
+							this.regDest,
+						]);
+					}
+					optStack.push(rightTok);
+					this.pushInstruction("PSH", [this.regDest]);
+					this.advance();
+					break;
+
+				default:
+					return res.fail(
+						new Error_InvalidSyntax(
+							this.currentTok.startPos,
+							this.currentTok.endPos,
+							`Unexpected token ${this.currentTok} during compilation.`
+						)
+					);
+			}
+		}
+
+		if (!this.instructions.at(-1).endsWith(this.regDest))
+			this.pushInstruction("POP", [this.regDest]);
+		this.pushInstruction("HLT", []);
+
+		return res.success(this.instructions);
 	}
 
-	floatToBitRepr(value) {
+	optimizeEmeraldASM() {
+		let optimizedCode = [...this.instructions];
+		let changesMade = true;
+
+		const getArgs = (htmlString) => {
+			const temp = document.createElement("div");
+			temp.innerHTML = htmlString;
+			return Array.from(
+				temp.querySelectorAll("span:not(.token-inst)")
+			).map((s) => s.textContent.trim().replace(/,/g, ""));
+		};
+
+		const getOp = (htmlString) => {
+			const temp = document.createElement("div");
+			temp.innerHTML = htmlString;
+			return temp.querySelector(".token-inst")?.innerText;
+		};
+
+		while (changesMade) {
+			changesMade = false;
+			let i = 0;
+
+			while (i < optimizedCode.length) {
+				const op = getOp(optimizedCode[i]);
+				const args = getArgs(optimizedCode[i]);
+
+				const next = optimizedCode[i + 1];
+				const nextOp = next ? getOp(next) : null;
+				const nextArgs = next ? getArgs(next) : [];
+
+				const nextNext = optimizedCode[i + 2];
+				const nextnextOp = nextNext ? getOp(nextNext) : null;
+				const nextnextArgs = nextNext ? getArgs(nextNext) : [];
+
+				if (
+					op === "PSH" &&
+					next &&
+					nextOp === "POP" &&
+					args[0] === nextArgs[0]
+				) {
+					optimizedCode.splice(i, 2);
+					changesMade = true;
+					continue;
+				}
+
+				if (
+					op === "POP" &&
+					next &&
+					nextOp === "PSH" &&
+					args[0] === nextArgs[0]
+				) {
+					optimizedCode.splice(i, 2);
+					changesMade = true;
+					continue;
+				}
+
+				if (
+					op === "PSH" &&
+					nextOp === "POP" &&
+					args[0].startsWith("#")
+				) {
+					const hexVal = args[0];
+					const targetReg = nextArgs[0];
+					optimizedCode[
+						i
+					] = `<span class='token-inst'>LDI</span> <span class='token-register'>${targetReg}</span>, <span class='token-value'>${hexVal}</span>`;
+					optimizedCode.splice(i + 1, 1);
+					changesMade = true;
+					continue;
+				}
+
+				if (
+					op === "PSH" &&
+					(nextnextOp === "LDP" || nextOp === "HLT")
+				) {
+					optimizedCode.splice(i, 1);
+					changesMade = true;
+					continue;
+				}
+
+				i++;
+			}
+		}
+
+		return optimizedCode;
+	}
+
+	emerald_padVars() {
+		for (let i = 0; i < this.declaredVars.length; i++) {
+			this.instructions.push(
+				`<span class='label'>.var-${this.declaredVars[i]}</span>`
+			);
+			this.instructions.push(`<span class='token-value'>#00</span>`);
+		}
+	}
+
+	fp8ToBitRepr(num) {
+		num = Number(num);
+		let signBit = num < 0 || (num === 0 && 1 / num < 0) ? 1 : 0;
+		let absoluteNum = Math.abs(num);
+		let result = "";
+
+		if (absoluteNum === 0) {
+			result = signBit === 0 ? "00000000" : "10000000";
+		} else if (absoluteNum > 448) {
+			result = `${signBit}1111111`;
+		} else {
+			let exponent = Math.floor(Math.log2(absoluteNum));
+			let mantissaValue = absoluteNum / Math.pow(2, exponent);
+			let biasedExponent = exponent + 7;
+
+			if (biasedExponent < 0) {
+				result = signBit === 0 ? "00000000" : "10000000";
+			}
+			if (biasedExponent >= 15) {
+				result = `${signBit}1111111`;
+			}
+
+			let fractionalMantissa = mantissaValue - 1.0;
+			let mantissaBitsInt = Math.round(
+				fractionalMantissa * Math.pow(2, 3)
+			);
+
+			let signStr = String(signBit);
+			let exponentStr = biasedExponent.toString(2).padStart(4, "0");
+			let mantissaStr = mantissaBitsInt
+				.toString(2)
+				.padStart(3, "0")
+				.substring(0, 3); // Ensure only 3 bits
+
+			result = `${signStr}${exponentStr}${mantissaStr}`;
+		}
+		console.log(result);
+		return parseInt(result, 2);
+	}
+
+	fp16ToBitRepr(value) {
 		const buffer = new ArrayBuffer(2);
 		const dataView = new DataView(buffer);
 		dataView.setFloat16(0, value, false);
@@ -674,4 +1052,3 @@ class Compiler {
 		return parseInt(binaryString, 2);
 	}
 }
-

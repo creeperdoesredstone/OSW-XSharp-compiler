@@ -22,6 +22,7 @@ class Lexer {
 			switch (true) {
 				case this.currentChar === " ":
 				case this.currentChar === "\t":
+				case this.currentChar === " ":
 				case this.currentChar === "\n":
 					this.advance();
 					break;
@@ -301,7 +302,35 @@ class Parser {
 								);
 
 							this.nextIdenForAssignment = this.currentTok;
+							this.nextIdenForAssignment.type = TT.TOASSIGN;
 							this.declaredVars.add(this.currentTok.value);
+							this.advance();
+
+							if (this.currentTok.type !== TT.COL)
+								return res.fail(
+									new Error_InvalidSyntax(
+										this.currentTok.startPos,
+										this.currentTok.endPos,
+										"Expected ':' after identifier in var declaration."
+									)
+								);
+							this.advance();
+
+							if (
+								this.currentTok.type !== TT.KEYW ||
+								DATATYPES.indexOf(this.currentTok.value) === -1
+							) {
+								console.log(this.currentTok);
+								return res.fail(
+									new Error_InvalidSyntax(
+										this.currentTok.startPos,
+										this.currentTok.endPos,
+										"Expected a data type after ':'."
+									)
+								);
+							}
+							this.nextIdenForAssignment.dataType =
+								this.currentTok.value;
 							this.advance();
 
 							if (this.currentTok.type !== TT.ASGN)
@@ -309,7 +338,7 @@ class Parser {
 									new Error_InvalidSyntax(
 										this.currentTok.startPos,
 										this.currentTok.endPos,
-										"Expected '=' after assignment."
+										"Expected '=' after data type in var declaration."
 									)
 								);
 							break;
@@ -336,7 +365,6 @@ class Parser {
 						o1Type === "ASGN" &&
 						this.nextIdenForAssignment !== null
 					) {
-						this.nextIdenForAssignment.type = TT.TOASSIGN;
 						outputQueue.push(this.nextIdenForAssignment);
 						this.nextIdenForAssignment = null;
 					}
@@ -444,6 +472,7 @@ const storeRes = document.getElementById("store-res");
 const run = (fn, ftxt) => {
 	rpnOutput.innerHTML = rpnLabel;
 	output.innerHTML = outLabel;
+	const asmLang = document.getElementById("language").value;
 
 	if (!ftxt.trim()) return new Result().success([]);
 
@@ -461,7 +490,7 @@ const run = (fn, ftxt) => {
 		return rpn;
 	}
 
-	const compiler = new Compiler(rpn.value, parser.declaredVars);
+	const compiler = new Compiler(rpn.value, parser.declaredVars, asmLang);
 	const asm = compiler.compile();
 	return asm;
 };
