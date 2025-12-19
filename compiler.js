@@ -141,42 +141,15 @@ class Compiler {
 	}
 
 	pushInstruction(inst, operands) {
-		const flags = ["NV", "CR", "LT", "EQ", "LE", "GT", "NE", "GE", "AL"];
-		let joinedOperands =
-			typeof operands === "string"
-				? [operands]
-				: operands
-						.map((operand) => {
-							operand = operand.toString();
-							if (flags.includes(operand))
-								return `<span class='token-flag'>${operand}</span>`;
-							if (operand.startsWith("#"))
-								return `<span class='token-value'>${operand}</span>`;
-							if (operand.startsWith("."))
-								return `<span class='label'>${operand}</span>`;
-							if (operand.endsWith("X"))
-								return `<span class='token-register'>${operand}</span>`;
-							if (
-								operand.startsWith("[") &&
-								operand.endsWith("X]")
-							)
-								return `[<span class='token-register'>${operand[1]}X</span>]`;
-							return `<span>${operand}</span>`;
-						})
-						.join(", ");
-
-		this.instructions.push(
-			`<span class='token-inst'>${inst}</span> ${joinedOperands}`
-		);
-		// this.instructions.push({ op: inst, operands: operands, });
+		this.instructions.push({ op: inst, args: operands });
 	}
 
 	formatHTML(inst) {
 		const flags = ["NV", "CR", "LT", "EQ", "LE", "GT", "NE", "GE", "AL"];
 		let joinedOperands =
-			typeof inst.operands === "string"
-				? [inst.operands]
-				: inst.operands
+			typeof inst.args === "string"
+				? [inst.args]
+				: inst.args
 						.map((operand) => {
 							operand = operand.toString();
 							if (flags.includes(operand))
@@ -196,9 +169,7 @@ class Compiler {
 						})
 						.join(", ");
 
-		this.instructions.push(
-			`<span class='token-inst'>${inst.op}</span> ${joinedOperands}`
-		);
+		return `<span class='token-inst'>${inst.op}</span> ${joinedOperands}`;
 	}
 
 	xenon_constOperation(operatorType, rightTok, leftTok) {
@@ -500,7 +471,7 @@ class Compiler {
 							.padStart(3, "0");
 						while (
 							this.instructions.length > 0 &&
-							this.instructions.at(-1).indexOf(hexValue) === -1
+							this.instructions.at(-1).args.at(-1) !== hexValue
 						) {
 							this.instructions.splice(-1, 1);
 						}
@@ -702,13 +673,13 @@ class Compiler {
 								`.bool-rtn-${this.labelCount}`,
 							]);
 						} else {
-						this.pushInstruction("POP", ["AX"]); // right
-						this.pushInstruction("POP", ["DX"]); // left
-						this.pushInstruction(this.currentTok.type.description, [
-							"DX",
-							"AX",
-							this.regDest,
-						]);}
+							this.pushInstruction("POP", ["AX"]); // right
+							this.pushInstruction("POP", ["DX"]); // left
+							this.pushInstruction(
+								this.currentTok.type.description,
+								["DX", "AX", this.regDest]
+							);
+						}
 					}
 					optStack.length = optStack.push(rightTok);
 					this.pushInstruction("PUSH", [this.regDest]);
@@ -725,7 +696,7 @@ class Compiler {
 			}
 		}
 
-		if (!this.instructions.at(-1).endsWith(this.regDest))
+		if (this.instructions.at(-1).args.at(-1) !== this.regDest)
 			this.pushInstruction("POP", [this.regDest]);
 		this.pushInstruction("HALT", []);
 		return res.success(this.instructions);
@@ -735,19 +706,6 @@ class Compiler {
 		let optimizedCode = [...this.instructions];
 		let changesMade = true;
 		let lineStart = 0;
-
-		const getArgs = (node) => {
-			const args = [];
-			for (let i = 0; i < node.childNodes.length; i++) {
-				if (
-					node.childNodes[i].tagName === "SPAN" &&
-					!node.childNodes[i].classList.contains("token-inst")
-				) {
-					args.push(node.childNodes[i].textContent.trim());
-				}
-			}
-			return args;
-		};
 
 		while (changesMade) {
 			changesMade = false;
@@ -759,37 +717,23 @@ class Compiler {
 				const next = optimizedCode[i + 1];
 				const nextNext = optimizedCode[i + 2];
 
-				const currentInst = document.createElement("p");
-				currentInst.innerHTML = current;
-				const op =
-					currentInst.getElementsByClassName("token-inst")[0]
-						.innerText;
-				const currentArgs = getArgs(currentInst);
+				const op = current.op;
+				const currentArgs = current.args;
 
 				if (next) {
-					const nextInst = document.createElement("p");
-					nextInst.innerHTML = next;
-					nextOp =
-						nextInst.getElementsByClassName("token-inst")[0]
-							.innerText;
-					nextArgs = getArgs(nextInst);
+					nextOp = next.op;
+					nextArgs = next.args;
 				}
 
 				if (nextNext) {
-					const nextnextInst = document.createElement("p");
-					nextnextInst.innerHTML = nextNext;
-					nextnextOp =
-						nextnextInst.getElementsByClassName("token-inst")[0]
-							.innerText;
-					nextnextArgs = getArgs(nextnextInst);
+					nextnextOp = nextNext.op;
+					nextnextArgs = nextNext.args;
 				}
 
 				if (op === "LDIS" && currentArgs[0] === "#ffff") {
 					const line = optimizedCode.slice(lineStart, i + 1);
 					const pushIdx = line.find((instruction) => {
-						instruction.startsWith(
-							"<span class='token-inst'>PUSH</span>"
-						);
+						instruction.op === "PUSH";
 					});
 					lineStart = i + 1;
 					if (pushIdx === undefined) {
@@ -828,11 +772,10 @@ class Compiler {
 					currentArgs[0].startsWith("#") &&
 					nextArgs[0] === "AX"
 				) {
-					optimizedCode[
-						i
-					] = `<span class='token-inst'>LDIA</span> <span class='token-value'>#0${currentArgs[0].substr(
-						1
-					)}</span>`;
+					optimizedCode[i] = {
+						op: "LDIA",
+						args: ["#0" + currentArgs[0].substr(1)],
+					};
 					optimizedCode.splice(i + 1, 1);
 					changesMade = true;
 					continue;
@@ -848,6 +791,9 @@ class Compiler {
 			}
 		}
 
+		for (let i = 0; i < optimizedCode.length; i++) {
+			optimizedCode[i] = this.formatHTML(optimizedCode[i]);
+		}
 		return optimizedCode;
 	}
 
@@ -939,7 +885,7 @@ class Compiler {
 					this.advance();
 					break;
 
-					case this.currentTok.type.description in operators:
+				case this.currentTok.type.description in operators:
 					const isUnary =
 						this.currentTok.type.description.startsWith("U");
 					if (optStack.length < 2 - Number(isUnary)) {
@@ -980,7 +926,7 @@ class Compiler {
 							.padStart(2, "0");
 						while (
 							this.instructions.length > 0 &&
-							this.instructions.at(-1).indexOf(hexValue) === -1
+							this.instructions.at(-1).args.at(-1) !== hexValue
 						) {
 							this.instructions.splice(-1, 1);
 						}
@@ -1208,7 +1154,7 @@ class Compiler {
 			}
 		}
 
-		if (!this.instructions.at(-1).endsWith(this.regDest))
+		if (this.instructions.at(-1).args.at[-1] !== this.regDest)
 			this.pushInstruction("POP", [this.regDest]);
 		this.pushInstruction("HLT", []);
 
@@ -1238,16 +1184,16 @@ class Compiler {
 			let i = 0;
 
 			while (i < optimizedCode.length) {
-				const op = getOp(optimizedCode[i]);
-				const args = getArgs(optimizedCode[i]);
+				const op = optimizedCode[i].op;
+				const args = optimizedCode[i].args;
 
 				const next = optimizedCode[i + 1];
-				const nextOp = next ? getOp(next) : null;
-				const nextArgs = next ? getArgs(next) : [];
+				const nextOp = next ? next.op : null;
+				const nextArgs = next ? next.args : [];
 
 				const nextNext = optimizedCode[i + 2];
-				const nextnextOp = nextNext ? getOp(nextNext) : null;
-				const nextnextArgs = nextNext ? getArgs(nextNext) : [];
+				const nextnextOp = nextNext ? nextNext.op : null;
+				const nextnextArgs = nextNext ? nextNext.args : [];
 
 				if (
 					op === "PSH" &&
@@ -1278,9 +1224,7 @@ class Compiler {
 				) {
 					const hexVal = args[0];
 					const targetReg = nextArgs[0];
-					optimizedCode[
-						i
-					] = `<span class='token-inst'>LDI</span> <span class='token-register'>${targetReg}</span>, <span class='token-value'>${hexVal}</span>`;
+					optimizedCode[i] = { op: "LDI", args: [targetReg, hexVal] };
 					optimizedCode.splice(i + 1, 1);
 					changesMade = true;
 					continue;
@@ -1299,6 +1243,9 @@ class Compiler {
 			}
 		}
 
+		for (let i = 0; i < optimizedCode.length; i++) {
+			optimizedCode[i] = this.formatHTML(optimizedCode[i]);
+		}
 		return optimizedCode;
 	}
 
