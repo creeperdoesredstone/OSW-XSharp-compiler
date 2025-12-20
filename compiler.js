@@ -5,16 +5,6 @@ const TT = Object.freeze(
 	}, {})
 );
 
-const KEYWORDS = ["var", "const", "for", "while"];
-const DATATYPES = ["int", "float"];
-KEYWORDS.push(...DATATYPES);
-const DIGITS = "0123456789";
-const LETTERS = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
-const VALID_IDEN = LETTERS + DIGITS + "_";
-
-const varOperators = ["ADDBY", "SUBBY", "MULBY", "DIVBY", "MODBY", "POWBY"];
-const compOperators = ["LT", "LE", "GT", "GE", "EQ", "NE"];
-
 class Token {
 	constructor(type, value, startPos, endPos) {
 		this.type = type;
@@ -1089,11 +1079,11 @@ class Compiler {
 							".var-" + leftTok.value,
 						]);
 						this.pushInstruction(op, [
-							this.regDest,
 							"[BX]",
-							["BX"],
+							this.regDest,
+							["[BX]"],
 						]);
-						this.pushInstruction("MOV", ["BX", this.regDest]);
+						this.pushInstruction("MOV", ["[BX]", this.regDest]);
 						this.pushInstruction("PSH", [this.regDest]);
 						this.advance();
 						break;
