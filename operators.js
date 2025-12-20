@@ -89,6 +89,7 @@ const ttList = [
 	"EOF",
 	"END",
 	"SEMI",
+	"COMMA",
 	"COL",
 	"IDEN",
 	"TOASSIGN",
@@ -123,9 +124,23 @@ const ttList = [
 	"LABEL",
 	"JMP",
 	"JMP_IF_FALSE",
+	"PUSH",
+	"POP",
+	"RET",
+	"CALL",
 ];
 
 let labelCounter = 0;
 const newLabel = (startPos, endPos) => {
 	return new Token(TT.LABEL, `L${labelCounter++}`, startPos, endPos);
 };
+
+const KEYWORDS = ["var", "const", "for", "while", "sub", "return"];
+const DATATYPES = ["int", "float"];
+KEYWORDS.push(...DATATYPES);
+const DIGITS = "0123456789";
+const LETTERS = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
+const VALID_IDEN = LETTERS + DIGITS + "_";
+
+const varOperators = ["ADDBY", "SUBBY", "MULBY", "DIVBY", "MODBY", "POWBY"];
+const compOperators = ["LT", "LE", "GT", "GE", "EQ", "NE"];

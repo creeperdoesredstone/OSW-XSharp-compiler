@@ -875,6 +875,50 @@ class Compiler {
 					this.advance();
 					break;
 
+				case this.currentTok.type === TT.PUSH:
+					this.pushInstruction("PSH", [
+						"#" +
+							this.currentTok.value.toString(16).padStart(2, "0"),
+					]);
+					this.advance();
+					break;
+
+				case this.currentTok.type === TT.RET:
+					this.pushInstruction("RTN", ["AL"]);
+					this.advance();
+					break;
+
+				case this.currentTok.type === TT.POP:
+					// Declare new variable
+					this.declaredVars.push(this.currentTok.value);
+					const varLocation = this.declaredVars.length - 1;
+					this.symbolTable[this.currentTok.value] = {
+						location: varLocation,
+						isConst: false,
+					};
+
+					this.pushInstruction("LDI", [
+						"BX",
+						".var-" + this.currentTok.value,
+					]);
+					this.pushInstruction("POP", [
+						this.regDest === "AX" ? "DX" : "AX",
+					]);
+					this.pushInstruction("STR", [
+						this.regDest === "AX" ? "DX" : "AX",
+						"[BX]",
+					]);
+					this.advance();
+					break;
+
+				case this.currentTok.type === TT.CALL:
+					this.pushInstruction("CALL", [
+						"AL",
+						this.currentTok.value.value,
+					]);
+					this.advance();
+					break;
+
 				case this.currentTok.type.description in operators:
 					const isUnary =
 						this.currentTok.type.description.startsWith("U");
@@ -1241,9 +1285,15 @@ class Compiler {
 
 	emerald_padVars() {
 		for (let i = 0; i < this.declaredVars.length; i++) {
-			if (this.symbolTable[this.declaredVars[i]].isConst) {
-				continue;
-			}
+			if (!(this.declaredVars[i] in this.symbolTable)) continue;
+			if (this.symbolTable[this.declaredVars[i]].isConst) continue;
+			if (
+				this.instructions.includes(
+					`<span class='label'>.var-${this.declaredVars[i]}</span>`
+				)
+			)
+				continue; // Avoid duplicate labels
+
 			this.instructions.push(
 				`<span class='label'>.var-${this.declaredVars[i]}</span>`
 			);

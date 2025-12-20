@@ -45,6 +45,18 @@ class Lexer {
 					this.advance();
 					break;
 
+				case this.currentChar === ",":
+					tokens.push(
+						new Token(
+							TT.COMMA,
+							undefined,
+							this.pos.copy(),
+							this.pos.copy()
+						)
+					);
+					this.advance();
+					break;
+
 				case this.currentChar === ":":
 					tokens.push(
 						new Token(
@@ -303,7 +315,11 @@ class Lexer {
 			}
 		}
 
-		if (tokens.length > 0 && tokens.at(-1).type !== TT.SEMI)
+		if (
+			tokens.length > 0 &&
+			tokens.at(-1).type !== TT.SEMI &&
+			tokens.at(-1).type !== TT.RBR
+		)
 			return new Result().fail(
 				new Error_InvalidSyntax(
 					tokens.at(-1).startPos,
@@ -322,16 +338,26 @@ class Parser {
 		this.tokens = tokens;
 		this.pos = -1;
 		this.currentTok = null;
+		this.lastTok = null;
 		this.advance();
+
 		this.declaredVars = new Set();
 		this.readOnlyVars = new Set();
+		this.functions = new Map();
 		this.nextIdenForAssignment = null;
 	}
 
 	advance() {
+		this.lastTok = this.pos < 0 ? null : this.tokens[this.pos];
 		this.pos++;
 		if (this.pos < this.tokens.length)
 			this.currentTok = this.tokens[this.pos];
+	}
+
+	peek() {
+		return this.pos < this.tokens.length
+			? this.tokens[this.pos + 1]
+			: this.tokens.at(-1);
 	}
 
 	finalizeStatement(outputQueue, operatorStack, res) {
@@ -360,24 +386,7 @@ class Parser {
 		const res = new Result();
 
 		while (this.currentTok.type !== TT.EOF) {
-			console.log(this.currentTok);
-			if (this.currentTok.type === TT.KEYW) {
-				switch (this.currentTok.value) {
-					case "for":
-						res.register(this.parseFor(outputQueue, res));
-						break;
-					case "while":
-						res.register(this.parseWhile(outputQueue, res));
-						break;
-					default:
-						this.parseSingleToken(outputQueue, operatorStack, res);
-						continue;
-				}
-				if (res.error) return res;
-				continue;
-			} else {
-				this.parseSingleToken(outputQueue, operatorStack, res);
-			}
+			this.parseSingleToken(outputQueue, operatorStack, res);
 		}
 
 		const finalizeResult = this.finalizeStatement(
@@ -394,8 +403,47 @@ class Parser {
 			case this.currentTok.type === TT.INT:
 			case this.currentTok.type === TT.FLOAT:
 			case this.currentTok.type === TT.IDEN:
-				outputQueue.push(this.currentTok);
-				this.advance();
+				if (
+					this.currentTok.type === TT.IDEN &&
+					this.peek().type === TT.LPR
+				) {
+					// Subroutine call
+					const fn = this.functions.get(this.currentTok.value);
+					if (!fn)
+						return res.fail(
+							new Error_Runtime(
+								tok.startPos,
+								tok.endPos,
+								"Unknown function"
+							)
+						);
+
+					this.advance(); // name
+					this.advance(); // '('
+
+					let argc = 0;
+					while (this.lastTok.type !== TT.RPR) {
+						this.parseExpressionUntil(
+							[TT.COMMA, TT.RPR],
+							outputQueue,
+							res
+						);
+						argc++;
+					}
+
+					const callTok = new Token(
+						TT.CALL,
+						fn.label,
+						this.currentTok.endPos,
+						this.currentTok.endPos
+					);
+					callTok.argc = argc;
+
+					outputQueue.push(callTok);
+				} else {
+					outputQueue.push(this.currentTok);
+					this.advance();
+				}
 				break;
 
 			case this.currentTok.type === TT.KEYW:
@@ -465,6 +513,30 @@ class Parser {
 									"Expected '=' after data type in var declaration."
 								)
 							);
+						break;
+
+					case "return":
+						this.advance();
+						this.parseExpressionUntil(TT.SEMI, outputQueue, res);
+						if (res.error) return res;
+						outputQueue.push(
+							new Token(
+								TT.RET,
+								undefined,
+								this.currentTok.endPos,
+								this.currentTok.endPos
+							)
+						);
+						break;
+
+					case "for":
+						res.register(this.parseFor(outputQueue, res));
+						break;
+					case "while":
+						res.register(this.parseWhile(outputQueue, res));
+						break;
+					case "sub":
+						res.register(this.parseSub(outputQueue, res));
 						break;
 
 					default:
@@ -607,8 +679,9 @@ class Parser {
 
 	parseExpressionUntil(endType, outputQueue, res) {
 		const operatorStack = [];
+		endType = typeof endType === "object" ? endType : [endType];
 
-		while (this.currentTok.type !== endType) {
+		while (!endType.includes(this.currentTok.type)) {
 			if (this.currentTok.type === TT.EOF)
 				return res.fail(
 					new Error_InvalidSyntax(
@@ -776,6 +849,108 @@ class Parser {
 		);
 		outputQueue.push(endLabel);
 
+		return res.success(null);
+	}
+
+	parseSub(outputQueue, res) {
+		this.advance(); // 'sub'
+
+		if (this.currentTok.type !== TT.IDEN)
+			return res.fail(
+				new Error_InvalidSyntax(
+					this.currentTok.startPos,
+					this.currentTok.endPos,
+					"Expected subroutine name after 'sub'."
+				)
+			);
+		const fname = this.currentTok.value;
+		this.advance();
+
+		if (this.currentTok.type !== TT.LPR)
+			return res.fail(
+				new Error_InvalidSyntax(
+					this.currentTok.startPos,
+					this.currentTok.endPos,
+					"Expected '(' after subroutine name."
+				)
+			);
+		this.advance();
+
+		const params = [];
+		while (this.currentTok.type !== TT.RPR) {
+			if (this.currentTok.type !== TT.IDEN)
+				return res.fail(
+					new Error_InvalidSyntax(
+						this.currentTok.startPos,
+						this.currentTok.endPos,
+						"Expected parameter name"
+					)
+				);
+			params.push(this.currentTok.value);
+			this.declaredVars.add(this.currentTok.value);
+			this.advance();
+
+			if (this.currentTok.type === TT.COMMA) this.advance();
+		}
+		this.advance();
+
+		const fnLabel = newLabel(
+			this.currentTok.endPos,
+			this.currentTok.endPos
+		);
+		this.functions.set(fname, { label: fnLabel, params });
+		this.declaredVars.add(fname);
+
+		const skipLabel = newLabel(
+			this.currentTok.endPos,
+			this.currentTok.endPos
+		);
+		outputQueue.push(
+			new Token(
+				TT.JMP,
+				skipLabel,
+				this.currentTok.endPos,
+				this.currentTok.endPos
+			)
+		);
+
+		outputQueue.push(fnLabel);
+
+		for (let i = params.length - 1; i >= 0; i--) {
+			outputQueue.push(
+				new Token(
+					TT.POP,
+					params[i],
+					this.currentTok.endPos,
+					this.currentTok.endPos
+				)
+			);
+		}
+
+		if (this.currentTok.type !== TT.LBR)
+			return res.fail(
+				new Error_InvalidSyntax(
+					this.currentTok.startPos,
+					this.currentTok.endPos,
+					"Expected '{'"
+				)
+			);
+		this.advance();
+		let body = this.currentTok;
+
+		while (this.currentTok.type !== TT.RBR) {
+			res.register(this.parseStatement(outputQueue, res));
+			if (res.error) return res;
+			body = this.currentTok;
+		}
+		this.advance();
+
+		outputQueue.push(new Token(TT.PUSH, 0, body.endPos, body.endPos));
+		outputQueue.push(
+			new Token(TT.RET, undefined, body.endPos, body.endPos)
+		);
+
+		outputQueue.push(skipLabel);
 		return res.success(null);
 	}
 }
