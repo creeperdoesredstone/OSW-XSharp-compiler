@@ -136,6 +136,131 @@ class Compiler {
 			this.currentTok = this.tokens[this.pos];
 	}
 
+	getRegisters(args) {
+		const regs = ["AX", "BX", "CX", "DX", "SX", "SP"];
+		let found = [];
+		if (typeof args !== "object") return [];
+		args.forEach((arg) => {
+			const clean = arg.replace(/[\[\]]/g, ""); // Remove brackets for [BX]
+			if (regs.includes(clean)) found.push(clean);
+		});
+		return found;
+	}
+
+	updateLiveness(inst, liveSet) {
+		const op = inst.op;
+		const args = inst.args;
+
+		if (op === "LDIA" || op === "LDIB" || op === "LDI") {
+			const dest = op === "LDIA" ? "AX" : args[0];
+			liveSet.delete(dest);
+		} else if (op === "MOVE" || op === "MOV") {
+			liveSet.delete(args[1]);
+		} else if (op === "POP") {
+			liveSet.delete(args[0]);
+		}
+
+		const readRegs = this.getRegisters(args);
+		readRegs.forEach((r) => liveSet.add(r));
+	}
+
+	getLastAccessedVar(index) {
+		// Look back up to 3 instructions to find where BX was loaded
+		for (let i = index; i >= 0 && i > index - 4; i--) {
+			const inst = this.instructions[i];
+
+			if (
+				inst.op === "LDI" &&
+				inst.args[0] === "BX" &&
+				inst.args[1].startsWith(".var-")
+			)
+				return inst.args[1];
+		}
+		return null;
+	}
+
+	getVarFromOperand(operand, index) {
+		if (typeof operand === "string" && operand.startsWith(".var-"))
+			return operand;
+
+		if (operand === "[BX]") return this.getLastAccessedVar(index);
+
+		return null;
+	}
+
+	performDCE(srcCode) {
+		// Pass 1: Remove Unreachable Code (Code after JUMP AL/RET/HALT)
+		let reachable = true;
+		let code = srcCode.filter((inst) => {
+			if (inst.op === "" && inst.args[0].startsWith(".")) {
+				reachable = true; // Labels are entry points
+				return true;
+			}
+			if (!reachable) return false;
+
+			const exitOps = [
+				"JUMP",
+				"JMP",
+				"RETN",
+				"RTN",
+				"HALT",
+				"HLT",
+				"CAL",
+				"CALL",
+			];
+			if (
+				exitOps.includes(inst.op) &&
+				(inst.args[0] === "AL" ||
+					inst.op === "HALT" ||
+					inst.op === "HLT")
+			) {
+				reachable = false;
+			}
+			return true;
+		});
+
+		// Pass 2: Dead Store Elimination (Backward)
+		let finalInstructions = [];
+		let liveRegisters = new Set(["AX", "BX", "CX", "DX", "SX", "SP"]); // Assume all used at end
+		let liveVariables = new Set(
+			this.symbolTable
+				? Object.keys(this.symbolTable).map((k) => `.var-${k}`)
+				: []
+		);
+
+		for (let i = code.length - 1; i >= 0; i--) {
+			const inst = code[i];
+
+			if (["LDIA", "LDI", "MOVE", "MOV"].includes(inst.op)) {
+				const dest = inst.op === "LDIA" ? "AX" : inst.args[0];
+				if (!liveRegisters.has(dest) && !inst.args[0].includes("[")) {
+					continue;
+				}
+			}
+
+			if (inst.op === "STR" || inst.op === "STRE") {
+				const target = inst.args[0]; // usually [BX]
+				const varName = this.getLastAccessedVar(i);
+
+				if (varName && !liveVariables.has(varName)) {
+					continue;
+				}
+
+				if (varName) liveVariables.delete(varName);
+			}
+
+			if (inst.op === "PSH" || inst.op === "PUSH") {
+				const varName = this.getVarFromOperand(inst.args[0], i);
+				if (varName) liveVariables.add(varName);
+			}
+
+			this.updateLiveness(inst, liveRegisters);
+			finalInstructions.unshift(inst);
+		}
+
+		return finalInstructions;
+	}
+
 	pushInstruction(inst, operands) {
 		this.instructions.push({ op: inst, args: operands });
 	}
@@ -570,21 +695,21 @@ class Compiler {
 								)
 							);
 
-						if (
-							leftTok.dataType.toUpperCase() !==
-							rightTok.type.description
-						)
-							return res.fail(
-								new Error_Compilation(
-									rightTok.startPos,
-									rightTok.endPos,
-									`Cannot assign '${
-										rightTok.type.description
-									}' to '${leftTok.dataType.toUpperCase()}'.`
-								)
-							);
-
 						if (!(leftTok.value in this.symbolTable)) {
+							if (
+								leftTok.dataType.toUpperCase() !==
+								rightTok.type.description
+							)
+								return res.fail(
+									new Error_Compilation(
+										rightTok.startPos,
+										rightTok.endPos,
+										`Cannot assign '${
+											rightTok.type.description
+										}' to '${leftTok.dataType.toUpperCase()}'.`
+									)
+								);
+
 							this.symbolTable[leftTok.value] = {
 								location: varLocation,
 								type: rightTok.type,
@@ -714,11 +839,7 @@ class Compiler {
 						this.pushInstruction("LDIB", [
 							"#" + varLocation.toString(16).padStart(4, "0"),
 						]);
-						this.pushInstruction(op, [
-							this.regDest,
-							"[BX]",
-							["BX"],
-						]);
+						this.pushInstruction(op, [this.regDest, "[BX]", "BX"]);
 						this.pushInstruction("MOVE", ["BX", this.regDest]);
 						this.pushInstruction("PUSH", [this.regDest]);
 						this.advance();
@@ -783,101 +904,6 @@ class Compiler {
 			this.pushInstruction("POP", [this.regDest]);
 		this.pushInstruction("HALT", []);
 		return res.success(this.instructions);
-	}
-
-	optimizeXenonASM() {
-		let optimizedCode = [...this.instructions];
-		let changesMade = true;
-		let lineStart = 0;
-
-		while (changesMade) {
-			changesMade = false;
-			let i = 0;
-			let nextOp, nextnextOp, nextArgs, nextnextArgs;
-
-			while (i < optimizedCode.length) {
-				const current = optimizedCode[i];
-				const next = optimizedCode[i + 1];
-				const nextNext = optimizedCode[i + 2];
-
-				const op = current.op;
-				const currentArgs = current.args;
-
-				if (next) {
-					nextOp = next.op;
-					nextArgs = next.args;
-				}
-
-				if (nextNext) {
-					nextnextOp = nextNext.op;
-					nextnextArgs = nextNext.args;
-				}
-
-				if (op === "LDIS" && currentArgs[0] === "#ffff") {
-					const line = optimizedCode.slice(lineStart, i + 1);
-					const pushIdx = line.find((instruction) => {
-						instruction.op === "PUSH";
-					});
-					lineStart = i + 1;
-					if (pushIdx === undefined) {
-						optimizedCode.splice(i, 1);
-						changesMade = true;
-						continue;
-					}
-				}
-
-				if (op === "CMOD" && next && nextOp === "CMOD") {
-					optimizedCode.splice(i, 1);
-					changesMade = true;
-					continue;
-				}
-
-				if (op === "PUSH" && next && nextOp === "POP") {
-					if (currentArgs[0] === nextArgs[0]) {
-						optimizedCode.splice(i, 2);
-						changesMade = true;
-						continue;
-					}
-				}
-
-				if (op === "POP" && next && nextOp === "PUSH") {
-					if (currentArgs[0] === nextArgs[0]) {
-						optimizedCode.splice(i, 2);
-						changesMade = true;
-						continue;
-					}
-				}
-
-				if (
-					op === "PSHI" &&
-					next &&
-					nextOp === "POP" &&
-					currentArgs[0].startsWith("#") &&
-					nextArgs[0] === "AX"
-				) {
-					optimizedCode[i] = {
-						op: "LDIA",
-						args: ["#0" + currentArgs[0].substr(1)],
-					};
-					optimizedCode.splice(i + 1, 1);
-					changesMade = true;
-					continue;
-				}
-
-				if (op === "PUSH" && ((next && nextOp == "LDIS") || !next)) {
-					optimizedCode.splice(i, 1);
-					changesMade = true;
-					continue;
-				}
-
-				i++;
-			}
-		}
-
-		for (let i = 0; i < optimizedCode.length; i++) {
-			optimizedCode[i] = this.formatHTML(optimizedCode[i]);
-		}
-		return optimizedCode;
 	}
 
 	compileEmerald() {
@@ -1107,21 +1133,21 @@ class Compiler {
 								)
 							);
 
-						if (
-							leftTok.dataType.toUpperCase() !==
-							rightTok.type.description
-						)
-							return res.fail(
-								new Error_Compilation(
-									rightTok.startPos,
-									rightTok.endPos,
-									`Cannot assign '${
-										rightTok.type.description
-									}' to '${leftTok.dataType.toUpperCase()}'.`
-								)
-							);
-
 						if (!(leftTok.value in this.symbolTable)) {
+							if (
+								leftTok.dataType.toUpperCase() !==
+								rightTok.type.description
+							)
+								return res.fail(
+									new Error_Compilation(
+										rightTok.startPos,
+										rightTok.endPos,
+										`Cannot assign '${
+											rightTok.type.description
+										}' to '${leftTok.dataType.toUpperCase()}'.`
+									)
+								);
+
 							this.symbolTable[leftTok.value] = {
 								location: varLocation,
 								type: rightTok.type,
@@ -1257,7 +1283,7 @@ class Compiler {
 						this.pushInstruction(op, [
 							"[BX]",
 							this.regDest,
-							["[BX]"],
+							"[BX]",
 						]);
 						this.pushInstruction("MOV", ["[BX]", this.regDest]);
 						this.pushInstruction("PSH", [this.regDest]);
@@ -1327,23 +1353,121 @@ class Compiler {
 		return res.success(this.instructions);
 	}
 
+	optimizeXenonASM() {
+		let optimizedCode = [...this.instructions];
+
+		optimizedCode = this.xenon_peephole(optimizedCode);
+
+		return optimizedCode;
+	}
+
+	xenon_peephole(code) {
+		let optimizedCode = [...code];
+		let changesMade = true;
+		let lineStart = 0;
+
+		while (changesMade) {
+			changesMade = false;
+			let i = 0;
+			let nextOp, nextnextOp, nextArgs, nextnextArgs;
+
+			while (i < optimizedCode.length) {
+				const current = optimizedCode[i];
+				const next = optimizedCode[i + 1];
+				const nextNext = optimizedCode[i + 2];
+
+				const op = current.op;
+				const currentArgs = current.args;
+
+				if (next) {
+					nextOp = next.op;
+					nextArgs = next.args;
+				}
+
+				if (nextNext) {
+					nextnextOp = nextNext.op;
+					nextnextArgs = nextNext.args;
+				}
+
+				if (op === "LDIS" && currentArgs[0] === "#ffff") {
+					const line = optimizedCode.slice(lineStart, i + 1);
+					const pushIdx = line.find((instruction) => {
+						instruction.op === "PUSH";
+					});
+					lineStart = i + 1;
+					if (pushIdx === undefined) {
+						optimizedCode.splice(i, 1);
+						changesMade = true;
+						continue;
+					}
+				}
+
+				if (op === "CMOD" && next && nextOp === "CMOD") {
+					optimizedCode.splice(i, 1);
+					changesMade = true;
+					continue;
+				}
+
+				if (op === "PUSH" && next && nextOp === "POP") {
+					if (currentArgs[0] === nextArgs[0]) {
+						optimizedCode.splice(i, 2);
+						changesMade = true;
+						continue;
+					}
+				}
+
+				if (op === "POP" && next && nextOp === "PUSH") {
+					if (currentArgs[0] === nextArgs[0]) {
+						optimizedCode.splice(i, 2);
+						changesMade = true;
+						continue;
+					}
+				}
+
+				if (
+					op === "PSHI" &&
+					next &&
+					nextOp === "POP" &&
+					currentArgs[0].startsWith("#") &&
+					nextArgs[0] === "AX"
+				) {
+					optimizedCode[i] = {
+						op: "LDIA",
+						args: ["#0" + currentArgs[0].substr(1)],
+					};
+					optimizedCode.splice(i + 1, 1);
+					changesMade = true;
+					continue;
+				}
+
+				if (op === "PUSH" && ((next && nextOp == "LDIS") || !next)) {
+					optimizedCode.splice(i, 1);
+					changesMade = true;
+					continue;
+				}
+
+				i++;
+			}
+		}
+
+		for (let i = 0; i < optimizedCode.length; i++) {
+			optimizedCode[i] = this.formatHTML(optimizedCode[i]);
+		}
+		return optimizedCode;
+	}
+
 	optimizeEmeraldASM() {
 		let optimizedCode = [...this.instructions];
+
+		optimizedCode = this.performDCE(optimizedCode);
+		optimizedCode = this.emerald_peephole(optimizedCode);
+
+		return optimizedCode;
+	}
+
+	emerald_peephole(code) {
+		let optimizedCode = [...code];
 		let changesMade = true;
-
-		const getArgs = (htmlString) => {
-			const temp = document.createElement("div");
-			temp.innerHTML = htmlString;
-			return Array.from(
-				temp.querySelectorAll("span:not(.token-inst)")
-			).map((s) => s.textContent.trim().replace(/,/g, ""));
-		};
-
-		const getOp = (htmlString) => {
-			const temp = document.createElement("div");
-			temp.innerHTML = htmlString;
-			return temp.querySelector(".token-inst")?.innerText;
-		};
 
 		while (changesMade) {
 			changesMade = false;
@@ -1368,6 +1492,22 @@ class Compiler {
 					args[0] === nextArgs[0]
 				) {
 					optimizedCode.splice(i, 2);
+					changesMade = true;
+					continue;
+				}
+
+				if (
+					op === "PSH" &&
+					args[0] === "[BX]" &&
+					next &&
+					nextOp === "POP" &&
+					nextArgs[0].endsWith("X")
+				) {
+					optimizedCode[i] = {
+						op: "STR",
+						args: ["[BX]", nextArgs[0]],
+					};
+					optimizedCode.splice(i + 1, 1);
 					changesMade = true;
 					continue;
 				}
