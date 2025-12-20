@@ -516,6 +516,7 @@ class Parser {
 						break;
 
 					case "return":
+						this.isReturning = true;
 						this.advance();
 						this.parseExpressionUntil(TT.SEMI, outputQueue, res);
 						if (res.error) return res;
@@ -853,6 +854,7 @@ class Parser {
 	}
 
 	parseSub(outputQueue, res) {
+		this.isReturning = false;
 		this.advance(); // 'sub'
 
 		if (this.currentTok.type !== TT.IDEN)
@@ -945,6 +947,8 @@ class Parser {
 		}
 		this.advance();
 
+		if (this.isReturning) return res.success(null);
+		
 		outputQueue.push(new Token(TT.PUSH, 0, body.endPos, body.endPos));
 		outputQueue.push(
 			new Token(TT.RET, undefined, body.endPos, body.endPos)

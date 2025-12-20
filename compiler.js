@@ -421,10 +421,30 @@ class Compiler {
 					break;
 
 				case this.currentTok.type === TT.PUSH:
-					this.pushInstruction("PSHI", [
-						"#" +
-							this.currentTok.value.toString(16).padStart(3, "0"),
-					]);
+					this.lastMode = this.isFloatMode;
+					this.isFloatMode = Number.isInteger(this.currentTok.value)
+						? false
+						: true;
+					const pushValue = this.isFloatMode
+						? this.fp16ToBitRepr(this.currentTok.value)
+						: this.currentTok.value;
+
+					if (pushValue < 0x400)
+						this.pushInstruction("PSHI", [
+							"#" +
+								this.currentTok.value
+									.toString(16)
+									.padStart(3, "0"),
+						]);
+					else {
+						this.pushInstruction("LDIA", [
+							"#" +
+								this.currentTok.value
+									.toString(16)
+									.padStart(4, "0"),
+						]);
+						this.pushInstruction("PUSH", ["AX"]);
+					}
 					this.advance();
 					break;
 
@@ -446,13 +466,8 @@ class Compiler {
 						"BX",
 						"#" + varLocation.toString(16).padStart(4, "0"),
 					]);
-					this.pushInstruction("POP", [
-						this.regDest === "AX" ? "DX" : "AX",
-					]);
-					this.pushInstruction("STR", [
-						this.regDest === "AX" ? "DX" : "AX",
-						"[BX]",
-					]);
+					this.pushInstruction("POP", [this.regDest]);
+					this.pushInstruction("STR", [this.regDest, "[BX]"]);
 					this.advance();
 					break;
 
@@ -460,7 +475,21 @@ class Compiler {
 					this.pushInstruction("LDIB", [
 						"." + this.currentTok.value.value,
 					]);
+
+					for (let i = 0; i < this.currentTok.argc; i++)
+						optStack.pop();
+
 					this.pushInstruction("CALL", ["AL", "BX"]);
+					
+					optStack.push(
+						new Token(
+							TT.INT, // Or a generic type if your language supports type inference
+							undefined,
+							this.currentTok.startPos,
+							this.currentTok.endPos
+						)
+					);
+					
 					this.advance();
 					break;
 
@@ -476,7 +505,7 @@ class Compiler {
 									2 - Number(isUnary)
 								} operands for operator ${
 									this.currentTok.type.description
-								}.`
+								}, found ${optStack.length} operands instead.`
 							)
 						);
 					}
@@ -924,6 +953,17 @@ class Compiler {
 						"#" +
 							this.currentTok.value.toString(16).padStart(2, "0"),
 					]);
+					const val = this.isFloatMode
+						? fp8ToBitRepr(this.currentTok.value)
+						: this.currentTok.value;
+					optStack.push(
+						new Token(
+							this.isFloatMode ? TT.FLOAT : TT.INT,
+							val,
+							this.currentTok.startPos,
+							this.currentTok.endPos
+						)
+					);
 					this.advance();
 					break;
 
@@ -960,6 +1000,19 @@ class Compiler {
 						"AL",
 						"." + this.currentTok.value.value,
 					]);
+
+					for (let i = 0; i < this.currentTok.argc; i++)
+						optStack.pop();
+
+					optStack.push(
+						new Token(
+							TT.INT, // Or a generic type if your language supports type inference
+							undefined,
+							this.currentTok.startPos,
+							this.currentTok.endPos
+						)
+					);
+
 					this.advance();
 					break;
 
@@ -975,11 +1028,12 @@ class Compiler {
 									2 - Number(isUnary)
 								} operands for operator ${
 									this.currentTok.type.description
-								}.`
+								}, found ${optStack.length} operands instead.`
 							)
 						);
 					}
 
+					console.log(...optStack);
 					const rightTok = optStack.pop();
 					let leftTok;
 					if (!isUnary) leftTok = optStack.pop();
