@@ -28,7 +28,6 @@ class Lexer {
 			switch (true) {
 				case this.currentChar === " ":
 				case this.currentChar === "\t":
-				case this.currentChar === " ":
 				case this.currentChar === "\n":
 					this.advance();
 					break;
@@ -188,6 +187,30 @@ class Lexer {
 					this.advance();
 					break;
 
+				case this.currentChar === "[":
+					tokens.push(
+						new Token(
+							TT.LSQ,
+							undefined,
+							this.pos.copy(),
+							this.pos.copy()
+						)
+					);
+					this.advance();
+					break;
+
+				case this.currentChar === "]":
+					tokens.push(
+						new Token(
+							TT.RSQ,
+							undefined,
+							this.pos.copy(),
+							this.pos.copy()
+						)
+					);
+					this.advance();
+					break;
+
 				case this.currentChar === "{":
 					tokens.push(
 						new Token(
@@ -250,6 +273,34 @@ class Lexer {
 
 					tokens.push(
 						new Token(ttype, undefined, startPos, this.pos.copy())
+					);
+					this.advance();
+					break;
+
+				case this.currentChar === '"':
+					this.advance();
+					resStr = "";
+
+					while (
+						this.currentChar !== null &&
+						this.currentChar !== "\n" &&
+						this.currentChar !== '"'
+					) {
+						resStr += this.currentChar;
+						this.advance();
+					}
+
+					if (this.currentChar !== '"')
+						return new Result().fail(
+							Error_InvalidSyntax(
+								this.pos.copy(),
+								this.pos.copy(),
+								"Reached EOL when parsing a string."
+							)
+						);
+
+					tokens.push(
+						new Token(TT.STR, resStr, startPos, this.pos.copy())
 					);
 					this.advance();
 					break;
@@ -402,11 +453,12 @@ class Parser {
 		switch (true) {
 			case this.currentTok.type === TT.INT:
 			case this.currentTok.type === TT.FLOAT:
+			case this.currentTok.type === TT.STR:
+				outputQueue.push(this.currentTok);
+				this.advance();
+				break;
 			case this.currentTok.type === TT.IDEN:
-				if (
-					this.currentTok.type === TT.IDEN &&
-					this.peek().type === TT.LPR
-				) {
+				if (this.peek().type === TT.LPR) {
 					// Subroutine call
 					const fn = this.functions.get(this.currentTok.value);
 					if (!fn)
@@ -440,6 +492,15 @@ class Parser {
 					callTok.argc = argc;
 
 					outputQueue.push(callTok);
+				} else if (this.peek().type === TT.LSQ) {
+					// Array access
+					const varTok = this.currentTok;
+					varTok.isArrayAccess = true;
+					this.advance(); // name
+					this.advance(); // '['
+
+					this.parseExpressionUntil(TT.RSQ, outputQueue, res);
+					outputQueue.push(varTok);
 				} else {
 					outputQueue.push(this.currentTok);
 					this.advance();
@@ -502,9 +563,36 @@ class Parser {
 								)
 							);
 						}
-						this.nextIdenForAssignment.dataType =
-							this.currentTok.value;
+
+						const baseType = this.currentTok.value;
+						this.nextIdenForAssignment.dataType = baseType;
 						this.advance();
+
+						if (this.currentTok.type === TT.LSQ) {
+							this.advance();
+							if (this.currentTok.type !== TT.INT) {
+								return res.fail(
+									new Error_InvalidSyntax(
+										this.currentTok.startPos,
+										"Array size must be an integer."
+									)
+								);
+							}
+							this.nextIdenForAssignment.isArray = true;
+							this.nextIdenForAssignment.arraySize = parseInt(
+								this.currentTok.value
+							);
+							this.advance();
+							if (this.currentTok.type !== TT.RSQ) {
+								return res.fail(
+									new Error_InvalidSyntax(
+										this.currentTok.startPos,
+										"Expected ']' after array size"
+									)
+								);
+							}
+							this.advance();
+						}
 
 						if (this.currentTok.type !== TT.ASGN)
 							return res.fail(
@@ -592,7 +680,6 @@ class Parser {
 						);
 					}
 
-					// Mark token as an assignment target and push to output queue.
 					targetTok.type = TT.TOASSIGN;
 					outputQueue.push(targetTok);
 					this.nextIdenForAssignment = null;
@@ -646,6 +733,30 @@ class Parser {
 					);
 				operatorStack.pop();
 				this.advance();
+				break;
+
+			case this.currentTok.type === TT.LSQ:
+				const elements = [];
+				this.advance();
+
+				while (this.currentTok.type !== TT.RSQ) {
+					this.parseExpressionUntil(
+						[TT.COMMA, TT.RSQ],
+						elements,
+						res
+					);
+					if (res.error) return res;
+					if (this.lastTok.type === TT.RSQ) break;
+				}
+
+				outputQueue.push(
+					new Token(
+						TT.ARRAY_LITERAL,
+						elements,
+						startPos,
+						this.pos.copy()
+					)
+				);
 				break;
 
 			case this.currentTok.type === TT.SEMI:
@@ -1019,6 +1130,12 @@ const run = (fn, ftxt) => {
 		return asm;
 	} catch (e) {
 		basePos.fn = fn;
+		const stack = e.stack;
+		// Regex to match filename:line:column
+		const match = /:(\d+):(\d+)/.exec(stack.split("\n")[1]);
+		if (match) {
+			console.log(`Line: ${match[1]}, Column: ${match[2]}`);
+		}
 		return new Result().fail(
 			new Error_Processing(basePos, basePos, e.message)
 		);
@@ -1026,7 +1143,7 @@ const run = (fn, ftxt) => {
 };
 
 const compileCode = () => {
-	let mainCode = code.innerText.trimEnd();
+	let mainCode = code.innerText.trimEnd().replaceAll(" ", " ");
 	const result = run(
 		document.getElementById("fn").value || "&lt;code&gt;",
 		mainCode

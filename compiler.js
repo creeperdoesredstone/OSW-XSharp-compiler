@@ -127,7 +127,9 @@ class Compiler {
 		this.lastMode = false;
 
 		this.symbolTable = {};
+		this.strings = {};
 		this.labelCount = 0;
+		this.currentLiteralValues = null;
 	}
 
 	advance() {
@@ -711,7 +713,6 @@ class Compiler {
 								);
 
 							this.symbolTable[leftTok.value] = {
-								location: varLocation,
 								type: rightTok.type,
 								isConst: leftTok.isConst,
 							};
@@ -915,12 +916,25 @@ class Compiler {
 				case this.currentTok.type === TT.INT:
 				case this.currentTok.type === TT.FLOAT:
 					let value = Number(this.currentTok.value);
-					optStack.length = optStack.push(this.currentTok);
+					optStack.push(this.currentTok);
 
 					this.lastMode = this.isFloatMode;
 					this.isFloatMode = this.currentTok.type === TT.FLOAT;
 
 					this.emerald_pushImmediate(value);
+					this.advance();
+					break;
+
+				case this.currentTok.type === TT.STR:
+					this.strings[this.labelCount] = this.currentTok.value;
+					this.pushInstruction("LDI", [
+						"BX",
+						`.str-${this.labelCount}`,
+					]);
+					this.pushInstruction("PSH", ["BX"]);
+					optStack.push(this.currentTok);
+					this.labelCount++;
+
 					this.advance();
 					break;
 
@@ -938,7 +952,11 @@ class Compiler {
 						);
 					}
 
-					if (varInfo.isConst && varInfo.foldedValue !== undefined) {
+					if (this.currentTok.isArrayAccess) {
+                        this.pushInstruction("LDI", ["BX", `.var-${this.currentTok.value}`]);
+                        this.pushInstruction("ADD", ["BX", "AX", "BX"]); // AX holds index from previous RPN
+                        this.pushInstruction("PSH", ["[BX]"]);
+                    } else if (varInfo.isConst && varInfo.foldedValue !== undefined) {
 						const value = varInfo.foldedValue;
 						const propagatedTok = new Token(
 							Number.isInteger(value) ? TT.INT : TT.FLOAT,
@@ -970,6 +988,18 @@ class Compiler {
 
 				case this.currentTok.type === TT.TOASSIGN:
 					optStack.length = optStack.push(this.currentTok);
+					if (this.currentTok.isArray)
+						this.symbolTable[this.currentTok.value] = {
+							lcoation: this.declaredVars.indexOf(
+								this.currentTok.value
+							),
+							type: TT[
+								"ARRAY_" + this.currentTok.dataType.upper()
+							],
+							size: this.currentTok.arraySize,
+							isConst: true,
+						};
+
 					this.advance();
 					break;
 
@@ -1018,12 +1048,16 @@ class Compiler {
 					this.advance();
 					break;
 
+				case TT.ARRAY_LITERAL:
+					this.currentLiteralValues = this.currentTok.value;
+					this.advance();
+					break;
+
 				case this.currentTok.type === TT.POP:
 					// Declare new variable
 					this.declaredVars.push(this.currentTok.value);
 					const varLocation = this.declaredVars.length - 1;
 					this.symbolTable[this.currentTok.value] = {
-						location: varLocation,
 						isConst: false,
 					};
 
@@ -1149,7 +1183,6 @@ class Compiler {
 								);
 
 							this.symbolTable[leftTok.value] = {
-								location: varLocation,
 								type: rightTok.type,
 								isConst: leftTok.isConst,
 							};
@@ -1346,7 +1379,10 @@ class Compiler {
 			}
 		}
 
-		if (this.instructions.at(-1).args.at[-1] !== this.regDest)
+		if (
+			this.instructions.length > 0 &&
+			this.instructions.at(-1).args.at[-1] !== this.regDest
+		)
 			this.pushInstruction("POP", [this.regDest]);
 		this.pushInstruction("HLT", []);
 
@@ -1557,18 +1593,36 @@ class Compiler {
 
 	emerald_padVars() {
 		for (let i = 0; i < this.declaredVars.length; i++) {
-			if (!(this.declaredVars[i] in this.symbolTable)) continue;
-			if (this.symbolTable[this.declaredVars[i]].isConst) continue;
+			const symb = this.declaredVars[i];
+			if (!(symb in this.symbolTable)) continue;
+			if (this.symbolTable[symb].isConst) continue;
 			if (
 				this.instructions.includes(
-					`<span class='label'>.var-${this.declaredVars[i]}</span>`
+					`<span class='label'>.var-${symb}</span>`
 				)
 			)
 				continue; // Avoid duplicate labels
 
+			this.instructions.push(`<span class='label'>.var-${symb}</span>`);
+			const count = this.symbolTable[symb].size || 1;
+			for (let i = 0; i < count; i++) {
+				this.instructions.push(`<span class='token-value'>#00</span>`);
+			}
+		}
+
+		for (const [key, value] of Object.entries(this.strings)) {
+			this.instructions.push(`<span class='label'>.str-${key}</span>`);
 			this.instructions.push(
-				`<span class='label'>.var-${this.declaredVars[i]}</span>`
+				`<span class='token-value'>#${value.length
+					.toString(16)
+					.padStart(2, "0")}</span>`
 			);
+			for (const char of value) {
+				const charCode = getCharIdx(char).toString(16).padStart(2, "0");
+				this.instructions.push(
+					`<span class='token-value'>#${charCode}</span>`
+				);
+			}
 			this.instructions.push(`<span class='token-value'>#00</span>`);
 		}
 	}

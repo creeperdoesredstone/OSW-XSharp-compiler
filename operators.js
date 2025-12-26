@@ -96,6 +96,7 @@ const ttList = [
 	"KEYW",
 	"INT",
 	"FLOAT",
+	"STR",
 	"ADD",
 	"UADD",
 	"SUB",
@@ -119,6 +120,8 @@ const ttList = [
 	"NE",
 	"LPR",
 	"RPR",
+	"LSQ",
+	"RSQ",
 	"LBR",
 	"RBR",
 	"LABEL",
@@ -128,6 +131,10 @@ const ttList = [
 	"POP",
 	"RET",
 	"CALL",
+	"ARRAY_LITERAL",
+	"ARRAY_INT",
+	"ARRAY_FLOAT",
+	"ARRAY_STR",
 ];
 
 let labelCounter = 0;
@@ -136,7 +143,7 @@ const newLabel = (startPos, endPos) => {
 };
 
 const KEYWORDS = ["var", "const", "for", "while", "sub", "return"];
-const DATATYPES = ["int", "float"];
+const DATATYPES = ["int", "float", "str"];
 KEYWORDS.push(...DATATYPES);
 const DIGITS = "0123456789";
 const LETTERS = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
@@ -146,3 +153,8 @@ const varOperators = ["ADDBY", "SUBBY", "MULBY", "DIVBY", "MODBY", "POWBY"];
 const compOperators = ["LT", "LE", "GT", "GE", "EQ", "NE"];
 
 const virtualFileSystem = {};
+
+const charMap =
+	" \n      @ABCDEFGHIJKLMNOPQRSTUVWXYZ[/]^_ !\"¢$%±'()*+,-.\\0123456789:;<=>?abcdefghijklmnopqrstuvwxyz{|}≤≥°";
+
+const getCharIdx = (char) => charMap.indexOf(char);
