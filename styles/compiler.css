@@ -1,0 +1,239 @@
+main {
+	display: flex;
+	flex-direction: row;
+	align-items: stretch;
+	height: calc(100vh - 150px);
+	width: 95%;
+	margin: 20px auto;
+	gap: 10px;
+}
+
+#back {
+	text-decoration: none;
+	color: var(--accent-text);
+}
+
+#file-nav {
+	width: 250px;
+	background-color: var(--accent-navbar);
+	border: 1px solid var(--card-border);
+	border-radius: 8px;
+	padding: 15px;
+	display: flex;
+	flex-direction: column;
+	gap: 15px;
+}
+
+#file-nav button,
+#btn-compile {
+	background-color: var(--accent-navbar2);
+	color: var(--accent-text);
+	border: 1px solid var(--card-border);
+	padding: 10px;
+	border-radius: 4px;
+	cursor: pointer;
+	font-weight: bold;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 8px;
+	transition: 300ms ease;
+	font-family: var(--font-main);
+}
+
+#btn-compile {
+    color: white;
+	background-color: var(--accent-subheading);
+	width: 150px;
+}
+
+#file-nav button:hover {
+	border-color: var(--accent-subheading);
+	color: var(--accent-subheading);
+    transform: translateX(5px);
+}
+
+#btn-compile:hover {
+	color: var(--accent-bg);
+	background-color: var(--accent-heading);
+}
+
+#files-list {
+	list-style: none;
+	display: flex;
+	flex-direction: column;
+	gap: 5px;
+}
+
+#editor {
+	display: flex;
+	flex-direction: column;
+	flex-grow: 1;
+	gap: 8px;
+}
+
+#codespace {
+	flex-grow: 1;
+	background-color: var(--accent-bg);
+	border: 1px solid var(--accent-heading);
+	border-radius: 8px;
+	padding: 20px;
+	font-family: "Fira Code", "JetBrains Mono", monospace;
+	color: var(--accent-text);
+	outline: none;
+	overflow-y: auto;
+	white-space: pre-wrap;
+	line-height: 1.5;
+	word-wrap: break-word;
+	overflow-wrap: break-word;
+
+	overflow-y: auto;
+	overflow-x: hidden;
+
+	max-width: 100%;
+	box-sizing: border-box;
+}
+
+#codespace::-webkit-scrollbar {
+	width: 8px;
+}
+
+#codespace::-webkit-scrollbar-thumb {
+	background: var(--accent-subheading);
+	border-radius: 4px;
+}
+
+#files-list li.naming-session {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 5px 10px;
+}
+
+#files-list input {
+	background: var(--accent-navbar);
+	border: 1px solid var(--accent-heading);
+	color: var(--accent-text);
+	font-family: inherit;
+	font-size: 0.9rem;
+	padding: 2px 5px;
+	outline: none;
+	width: 100%;
+	border-radius: 4px;
+}
+
+.file-blob {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	padding: 10px 15px;
+	background-color: var(--accent-navbar2);
+	border: 1px solid rgba(255, 255, 255, 0.1);
+	border-radius: 6px;
+	width: 100%;
+	margin-bottom: 8px;
+	transition: all 0.2s ease;
+}
+
+.file-blob i {
+	color: var(--accent-subheading);
+	font-size: 1.1rem;
+}
+
+.file-blob a {
+	text-decoration: none;
+	font-size: 0.95rem;
+	color: var(--accent-text);
+	font-family: "Fira Code", monospace;
+	flex-grow: 1;
+}
+
+.file-blob:hover {
+	border-color: var(--accent-heading);
+	background-color: var(--accent-navbar);
+	transform: translateX(5px);
+	box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+}
+
+.file-blob:hover i {
+	color: var(--accent-heading);
+	text-shadow: 0 0 8px var(--accent-heading);
+}
+
+#editor-container {
+    flex-grow: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+#terminal {
+    height: 200px;
+    background-color: #0a0a0a;
+    border: 1px solid var(--card-border);
+    border-top: 2px solid var(--accent-heading);
+    border-radius: 8px;
+    display: flex;
+    flex-direction: column;
+    font-family: 'Fira Code', monospace;
+}
+
+.terminal-header {
+    background-color: var(--accent-navbar2);
+    padding: 5px 15px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.8rem;
+    color: var(--accent-heading);
+    border-bottom: 1px solid var(--card-border);
+}
+
+#terminal-output {
+    padding: 10px;
+    overflow-y: auto;
+    font-size: 0.85rem;
+    color: #d1d1d1;
+    line-height: 1.4;
+}
+
+.terminal-line { margin-bottom: 4px; display: block; }
+.system-msg { color: var(--accent-subheading); }
+.success-msg { color: #00ff88; }
+.error-msg { color: #ff4d4d; }
+.asm-msg { color: #e6db74; }
+
+#btn-clear-terminal {
+	background-color: transparent;
+	color: var(--accent-text);
+	font-family: var(--font-main);
+	border: none;
+	text-decoration: underline;
+	opacity: 0.7;
+	transition: opacity 300ms ease;
+	cursor: pointer;
+}
+
+#btn-clear-terminal:hover {
+	opacity: 1;
+}
+
+@media (max-width: 768px) {
+	main {
+		flex-direction: column;
+		height: auto;
+	}
+
+	#file-nav {
+		width: 100%;
+		height: 200px;
+	}
+
+	#btn-compile {
+		align-self: center;
+	}
+
+	#codespace {
+		height: 500px;
+	}
+}
