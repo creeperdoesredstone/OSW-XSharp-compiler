@@ -24,6 +24,14 @@ main {
 	gap: 15px;
 }
 
+.icon-xasm {
+    color: #ff5722 !important;
+}
+
+.icon-default {
+    color: var(--accent-subheading); 
+}
+
 #file-nav button,
 #btn-compile,
 #btn-vm {
@@ -170,11 +178,6 @@ main {
 	box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
 }
 
-.file-blob:hover i {
-	color: var(--accent-heading);
-	text-shadow: 0 0 8px var(--accent-heading);
-}
-
 #editor-container {
 	flex-grow: 1;
 	display: flex;
@@ -218,6 +221,7 @@ main {
 	font-size: 0.85rem;
 	color: #d1d1d1;
 	line-height: 1.4;
+	white-space: pre;
 }
 
 .terminal-line {
