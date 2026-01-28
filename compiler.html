@@ -50,9 +50,14 @@
 				<ul id="files-list"></ul>
 			</div>
 			<div id="editor">
-				<button type="button" title="Compile" id="btn-compile">
-					<i class="fa-solid fa-gears"></i> Compile
-				</button>
+				<div id="buttons">
+					<button type="button" title="Compile" id="btn-compile">
+						<i class="fa-solid fa-gears"></i> Compile
+					</button>
+					<button type="button" title="VM" id="btn-vm">
+						<i class="fa-solid fa-computer"></i> VM
+					</button>
+				</div>
 				<div id="codespace"></div>
 
 				<div id="terminal">
@@ -72,6 +77,14 @@
 		<button type="button" id="btn-toggle-theme" title="Toggle theme">
 			<i class="fa-solid fa-circle-half-stroke"></i>
 		</button>
+
+		<script>
+			const urlParams = new URLSearchParams(window.location.search);
+			const fn = urlParams.get("file").replace("_", ".");
+			const compileBtn = document.querySelector("#btn-compile");
+
+			compileBtn.disabled = fn.endsWith(".xasm");
+		</script>
 
 		<script src="scripts/toggleTheme.js"></script>
 		<script src="scripts/fnInput.js" type="module"></script>
