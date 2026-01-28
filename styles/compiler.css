@@ -25,7 +25,8 @@ main {
 }
 
 #file-nav button,
-#btn-compile {
+#btn-compile,
+#btn-vm {
 	background-color: var(--accent-navbar2);
 	color: var(--accent-text);
 	border: 1px solid var(--card-border);
@@ -42,20 +43,34 @@ main {
 }
 
 #btn-compile {
-    color: white;
+	color: white;
 	background-color: var(--accent-subheading);
+	width: 150px;
+}
+
+#btn-vm {
+	color: var(--accent-text);
+	background-color: var(--accent-navbar);
 	width: 150px;
 }
 
 #file-nav button:hover {
 	border-color: var(--accent-subheading);
 	color: var(--accent-subheading);
-    transform: translateX(5px);
+	transform: translateX(5px);
 }
 
 #btn-compile:hover {
 	color: var(--accent-bg);
 	background-color: var(--accent-heading);
+}
+
+#btn-compile:disabled {
+	display: none;
+}
+
+#btn-vm:hover {
+	background-color: var(--accent-navbar2);
 }
 
 #files-list {
@@ -161,47 +176,66 @@ main {
 }
 
 #editor-container {
-    flex-grow: 1;
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
+	flex-grow: 1;
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+}
+
+#buttons {
+	display: flex;
+	flex-direction: row;
+	gap: 12px;
 }
 
 #terminal {
-    height: 200px;
-    background-color: #0a0a0a;
-    border: 1px solid var(--card-border);
-    border-top: 2px solid var(--accent-heading);
-    border-radius: 8px;
-    display: flex;
-    flex-direction: column;
-    font-family: 'Fira Code', monospace;
+	height: 200px;
+	background-color: #0a0a0a;
+	border: 1px solid var(--card-border);
+	border-top: 2px solid var(--accent-heading);
+	border-radius: 8px;
+	display: flex;
+	flex-direction: column;
+	font-family: "Fira Code", monospace;
+	overflow: hidden;
 }
 
 .terminal-header {
-    background-color: var(--accent-navbar2);
-    padding: 5px 15px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    font-size: 0.8rem;
-    color: var(--accent-heading);
-    border-bottom: 1px solid var(--card-border);
+	background-color: var(--accent-navbar2);
+	padding: 5px 15px;
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	font-size: 0.8rem;
+	color: var(--accent-heading);
+	border-bottom: 1px solid var(--card-border);
+	overflow: hidden;
 }
 
 #terminal-output {
-    padding: 10px;
-    overflow-y: auto;
-    font-size: 0.85rem;
-    color: #d1d1d1;
-    line-height: 1.4;
+	padding: 10px;
+	overflow-y: auto;
+	font-size: 0.85rem;
+	color: #d1d1d1;
+	line-height: 1.4;
 }
 
-.terminal-line { margin-bottom: 4px; display: block; }
-.system-msg { color: var(--accent-subheading); }
-.success-msg { color: #00ff88; }
-.error-msg { color: #ff4d4d; }
-.asm-msg { color: #e6db74; }
+.terminal-line {
+	margin-bottom: 4px;
+	display: block;
+}
+.system-msg {
+	color: var(--accent-subheading);
+}
+.success-msg {
+	color: #00ff88;
+}
+.error-msg {
+	color: #ff4d4d;
+}
+.asm-msg {
+	color: #e6db74;
+}
 
 #btn-clear-terminal {
 	background-color: transparent;
@@ -229,7 +263,7 @@ main {
 		height: 200px;
 	}
 
-	#btn-compile {
+	#buttons {
 		align-self: center;
 	}
 
